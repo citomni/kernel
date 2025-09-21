@@ -1,0 +1,67 @@
+{
+	"name": "citomni/kernel",
+	"description": "Ultra-lean application kernel for CitOmni-based apps. PHP 8.2+, PSR-4, deterministic boot, zero runtime magic.",
+	"type": "library",
+	"license": "GPL-3.0-or-later",
+	"homepage": "https://github.com/citomni/kernel",
+	"keywords": ["citomni", "kernel", "framework", "frameworks", "framework-php", "php-framework", "psr-4", "php8", "performance", "high-performance", "deterministic", "deterministic-merge", "read-only-config", "service-locator", "service-map", "lazy-loading", "low-overhead", "lightweight", "microkernel", "microframework"],
+	"require": {
+		"php": "^8.2"
+	},
+	"autoload": {
+		"psr-4": {
+			"CitOmni\\Kernel\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"CitOmni\\Kernel\\Tests\\": "tests/"
+		}
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^11.0"
+	},
+	"suggest": {
+		"ext-json": "Faster JSON handling",
+		"ext-mbstring": "Robust string handling",
+		"ext-opcache": "Production performance",
+		"ext-apcu": "Speed up Composer's class loading in production",
+		"citomni/http": "HTTP runtime: Kernel+router+request/response+error handler for web apps",
+		"citomni/cli": "CLI runtime: Kernel+command runner with the same deterministic boot",
+		"citomni/infrastructure": "Shared infra services (db, log, mail, txt) for HTTP & CLI",
+		"citomni/auth": "User accounts, login/registration, and member profile flows",
+		"citomni/testing": "Dev-only integration test harness; zero prod overhead"
+	},
+	"support": {
+		"issues": "https://github.com/citomni/kernel/issues",
+		"source": "https://github.com/citomni/kernel",
+		"docs": "https://github.com/citomni/kernel#readme"
+	},
+	"authors": [
+		{
+			"name": "Lars Grove Mortensen",
+			"homepage": "https://www.citomni.com"
+		}
+	],
+	"config": {
+		"sort-packages": true,
+		"optimize-autoloader": true
+	},
+	"archive": {
+		"exclude": [
+			"/.github",
+			"/docs",
+			"/tests",
+			"/dev",
+			"/examples",
+			"/vendor",
+			"/.editorconfig",
+			"/.gitattributes",
+			"/.gitignore",
+			"/phpunit.xml*",
+			"/.idea",
+			"/.vscode",
+			"/Makefile"
+		]
+	}
+}
