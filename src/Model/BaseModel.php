@@ -67,8 +67,20 @@ abstract class BaseModel {
 	 * @var \App Core application instance.
 	 */
 	protected App $app;
-	
-	
+
+
+	/**
+	 * Optional configuration options passed at construction.
+	 *
+	 * Provides per-instance parameters or overrides for models.
+	 * These values are opaque to the base class and consumed
+	 * only by child models that recognize them.
+	 *
+	 * @var array<string,mixed> Arbitrary options for model customization.
+	 */
+	protected array $options;
+
+
 	/**
 	 * Database connection handle (LiteMySQLi).
 	 *
@@ -82,26 +94,32 @@ abstract class BaseModel {
 	 *
 	 * @var \LiteMySQLi\LiteMySQLi
 	 */
-	protected \LiteMySQLi\LiteMySQLi $db;
+	// protected \LiteMySQLi\LiteMySQLi $db;
 	
 
     /**
      * BaseModel constructor.
      * 
-     * @param App   $app          The main app service container.
-     */
-    public function __construct($app) {
+	 * Inject the application container and optional options bag.
+	 *
+	 * @param App $app Application instance (shared container/config).
+	 * @param array<string,mixed> $options Optional model-specific settings.
+	 */
+    public function __construct(App $app, array $options = []) {		
 		
-		$this->app = $app; // Expose services: $this->app->cfg, $this->app->db, ...
+		$this->app = $app;  // Expose services (e.g., $this->app->cfg, $this->app->log, ...)
+		
+		$this->options = $options;  // Store per-service tunables (local only, no global config impact)
+
 		
 		// Establish the db-connection
-		$this->db = $this->app->db->establish(); // One connection per request/process
-		
+		// $this->db = $this->app->db->establish(); // One connection per request/process
+
 		// Call an `init()` method if the child class has defined one 
 		// Note: This is an optional lifecycle hook; keep it lightweight.
-		if (method_exists($this, 'init')) {
+		if (\method_exists($this, 'init')) {
 			$this->init();
-		}	
+		}
 		
     }
 
