@@ -135,6 +135,8 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
  */
 
 	/**
+	 * REPLACED BELOW: OLD ONE HAS BEEN KEPT FOR SAFETY UNTIL NEW ONE HAS BEEN BATTLE-TESTED!
+	 * 
 	 * Magic property accessor for configuration nodes.
 	 *
 	 * Behavior:
@@ -157,6 +159,7 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
 	 * @throws \OutOfBoundsException When the key does not exist at this node.
 	 */
+	/* 
 	public function __get(string $key): mixed {
 		if (!\array_key_exists($key, $this->data)) {
 			throw new \OutOfBoundsException("Unknown cfg key: '{$key}'");
@@ -176,6 +179,76 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 
 		return $val;
 	}
+	*/
+	
+	
+	/**
+	 * Magic property accessor for configuration nodes.
+	 *
+	 * Returns either a wrapped configuration node (Cfg), a raw array, or a scalar
+	 * depending on the stored value and key-specific contracts. Designed for
+	 * predictable, low-overhead access with memoization on hot paths.
+	 *
+	 * Behavior:
+	 * - Fail fast on unknown keys: throws \OutOfBoundsException.
+	 * - Keys in RAW_ARRAY_SET (e.g., "routes") are always returned as **raw arrays**
+	 *   (even when empty). If such a key does not hold an array, throws
+	 *   \UnexpectedValueException.
+	 * - For other array values:
+	 *     - Empty arrays **or** associative arrays -> wrapped as a Cfg node (memoized).
+	 *     - Numeric lists (0..n-1) -> returned as raw arrays.
+	 * - Non-array values (scalars) are returned as-is.
+	 *
+	 * Notes:
+	 * - Memoization ensures repeated access to the same nested node does not re-wrap.
+	 * - Deterministic "last wins" merging means an environment overlay like
+	 *   `'http' => []` produces an empty Cfg node (so `$cfg->http->toArray()` is safe),
+	 *   while `'routes' => []` remains a raw array by contract.
+	 * - RAW_ARRAY_SET exists to keep specific collections (e.g., routing tables)
+	 *   as plain arrays for performance and simplicity.
+	 *
+	 * Typical usage:
+	 *   $baseUrl = $cfg->http->base_url ?? null;       // nested node access
+	 *   $http    = isset($cfg->http) ? $cfg->http->toArray() : [];
+	 *   $routes  = $cfg->routes;                       // raw array by contract
+	 *
+	 * @param string $key Existing configuration key at this node.
+	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
+	 * @throws \OutOfBoundsException   If the key does not exist at this node.
+	 * @throws \UnexpectedValueException If a RAW_ARRAY_SET key does not hold an array.
+	 */
+	public function __get(string $key): mixed {
+		if (!\array_key_exists($key, $this->data)) {
+			throw new \OutOfBoundsException("Unknown cfg key: '{$key}'");
+		}
+
+		$val = $this->data[$key];
+
+		// 1) Raw-array contract for special keys (e.g., 'routes')
+		if (isset(self::RAW_ARRAY_SET[$key])) {
+			if (!\is_array($val)) {
+				// Fail fast: 'routes' (or other raw keys) must always be arrays
+				throw new \UnexpectedValueException("Config key '{$key}' must be an array.");
+			}
+			return $val; // always raw (even when empty)
+		}
+
+		// 2) Non-arrays are returned as-is (scalars)
+		if (!\is_array($val)) {
+			return $val;
+		}
+
+		// 3) Empty arrays and associative arrays -> wrap as Cfg (prevents ->toArray() crashes)
+		if ($val === [] || self::isAssoc($val)) {
+			return $this->cache[$key] ??= new self($val);
+		}
+
+		// 4) Numeric lists remain raw arrays (e.g., trusted_proxies)
+		return $val;
+	}
+
+
+
 
 
 	/**

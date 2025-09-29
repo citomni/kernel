@@ -4,7 +4,7 @@
 	"type": "library",
 	"license": "GPL-3.0-or-later",
 	"homepage": "https://github.com/citomni/kernel",
-	"keywords": ["citomni", "kernel", "framework", "frameworks", "framework-php", "php-framework", "psr-4", "php8", "performance", "high-performance", "deterministic", "deterministic-merge", "read-only-config", "service-locator", "service-map", "lazy-loading", "low-overhead", "lightweight", "microkernel", "microframework"],
+	"keywords": ["citomni", "kernel", "framework", "frameworks", "framework-php", "php-framework", "psr-4", "php8", "performance", "high-performance", "deterministic", "deterministic-merge", "service-locator", "service-map", "lazy-loading", "low-overhead", "lightweight", "lightweight-framework", "microkernel", "microframework"],
 	"require": {
 		"php": "^8.2"
 	},
