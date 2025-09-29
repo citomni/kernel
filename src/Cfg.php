@@ -311,6 +311,9 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 
 
 	/**
+	 * NOTE: This has been replaced by the version below. We will keep this for now, until
+	 *       the new version has been battle tested.
+	 * 
 	 * ArrayAccess read accessor for configuration nodes.
 	 *
 	 * Behavior:
@@ -334,6 +337,7 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
 	 * @throws \OutOfBoundsException When the key does not exist at this node.
 	 */
+	/* 
 	public function offsetGet(mixed $offset): mixed {
 		if (!\array_key_exists($offset, $this->data)) {
 			throw new \OutOfBoundsException("Unknown cfg key: '{$offset}'");
@@ -354,6 +358,59 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 
 		return $val;
 	}
+	*/
+
+
+	/**
+	 * ArrayAccess read accessor for configuration nodes.
+	 *
+	 * Behavior:
+	 * - Fail fast on unknown keys (throws \OutOfBoundsException).
+	 * - If the value is an array and the offset key is listed in RAW_ARRAY_SET (e.g., "routes"),
+	 *   return the raw array (never wrapped).
+	 * - If the value is an associative array or an empty array, lazily wrap it as a Cfg node and
+	 *   memoize the wrapper instance (parity with __get()).
+	 * - Otherwise, return the value as-is (scalars or numeric lists).
+	 *
+	 * Notes:
+	 * - Provides parity with property access while keeping array semantics.
+	 *
+	 * Typical usage:
+	 *   $charset = $cfg['locale']['charset'] ?? 'UTF-8';
+	 *   $routes  = $cfg['routes']; // raw array by contract
+	 *
+	 * @param string|int $offset Existing configuration key at this node.
+	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
+	 * @throws \OutOfBoundsException When the key does not exist at this node.
+	 */
+	public function offsetGet(mixed $offset): mixed {
+		if (!\array_key_exists($offset, $this->data)) {
+			throw new \OutOfBoundsException("Unknown cfg key: '{$offset}'");
+		}
+
+		$key = (string)$offset;
+		$val = $this->data[$key];
+
+		// 1) Enforce raw array for specific keys (e.g., routes)
+		if (isset(self::RAW_ARRAY_SET[$key])) {
+			if (!\is_array($val)) {
+				throw new \UnexpectedValueException("Config key '{$key}' must be an array.");
+			}
+			return $val;
+		}
+
+		// 2) Wrap assoc OR empty arrays as Cfg; memoize (parity with __get())
+		if (\is_array($val)) {
+			if ($val === [] || self::isAssoc($val)) {
+				return $this->cache[$key] ??= new self($val);
+			}
+			return $val; // numeric list stays a plain array
+		}
+
+		return $val;
+	}
+
+
 
 
 	/**
