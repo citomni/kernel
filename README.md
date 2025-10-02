@@ -19,9 +19,20 @@ It does **not** ship HTTP/CLI controllers, routers, error handlers, etc. Those l
 * **Zero magic, low overhead.** Arrays + a read-only config wrapper + a minimal service locator. Lazy singletons per `$app` instance.
 * **Mode-aware.** HTTP and CLI have different baselines. The kernel is mode-agnostic and takes a `Mode` enum so each delivery layer owns its concerns.
 * **Upgrade-safe apps.** Config/services live in your app, providers opt-in via whitelist. No vendor overrides inside your app code.
+* ♻️ **Green by design** - lower memory use and CPU cycles -> less server load, more requests per watt, better scalability, smaller carbon footprint.
 
 ---
 
+### Green by design
+
+CitOmni's "Green by design" claim is empirically validated at the framework level.
+
+The core runtime achieves near-floor CPU and memory costs per request on commodity shared infrastructure, sustaining hundreds of RPS per worker with extremely low footprint.
+
+See the full test report here:
+https://github.com/citomni/.github/blob/main/docs/CitOmni_Framework_-Capacity_and_Green_by_Design_Test_Report-2025-10-02.md
+
+---
 ## Installation
 
 Require the kernel from your application:
