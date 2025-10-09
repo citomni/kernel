@@ -11,6 +11,8 @@ The **kernel** is the tiniest possible layer that:
 
 It does **not** ship HTTP/CLI controllers, routers, error handlers, etc. Those live in the `citomni/http` and `citomni/cli` packages. The kernel stays infrastructure-only and small.
 
+> **Pillars:** _Deterministic boot_ · _Low overhead_ · _TTFB as a KPI_ · _Green by design_
+
 ---
 
 ## Why this kernel exists
@@ -23,14 +25,31 @@ It does **not** ship HTTP/CLI controllers, routers, error handlers, etc. Those l
 
 ---
 
+## Who should choose CitOmni?
+
+* **TTFB is a KPI.** You care about cold-start and p95 response times more than “batteries included.”
+* **Resource efficiency matters.** You track memory per request and CPU ms per request; overhead ≈ wasted budget.
+* **Determinism > magic.** You want predictable boot order and explicit overrides (no reflection/autowiring surprises).
+* **Small, fast, edge-friendly.** Runs well in tiny containers and shared hosting; cache warmers are first-class.
+* ♻️ **Green by design.** Fewer CPU cycles and lower memory footprint per request reduce energy use and emissions.
+
+---
+
 ### Green by design
 
 CitOmni's "Green by design" claim is empirically validated at the framework level.
 
+**Why it’s greener:** constant-driven merges (no reflection), zero boot scanning, and warmed caches minimize CPU cycles and memory churn per request.
+This yields:
+* **Lower energy per 1k requests** (less CPU time),
+* **Higher requests-per-watt** (better consolidation density),
+* **Smaller instances/containers** (lower embodied & operating carbon).
+
 The core runtime achieves near-floor CPU and memory costs per request on commodity shared infrastructure, sustaining hundreds of RPS per worker with extremely low footprint.
 
 See the full test report here:
-https://github.com/citomni/.github/blob/main/docs/CitOmni_Framework_-Capacity_and_Green_by_Design_Test_Report-2025-10-02.md
+[CitOmni Capacity & Green-by-Design Test Report (2025-10-02)](https://github.com/citomni/.github/blob/main/docs/CitOmni_Framework_-Capacity_and_Green_by_Design_Test_Report-2025-10-02.md)
+
 
 ---
 ## Installation
@@ -39,7 +58,7 @@ Require the kernel from your application:
 
 ```bash
 composer require citomni/kernel
-````
+```
 
 Your app will also require `citomni/http` and/or `citomni/cli` for delivery layers.
 
@@ -85,9 +104,10 @@ define('CITOMNI_PUBLIC_PATH', __DIR__);           // no trailing slash; /public 
 define('CITOMNI_APP_PATH', \dirname(__DIR__));    // app root; no trailing slash
 
 require CITOMNI_APP_PATH . '/vendor/autoload.php';
-````
+```
 
 > CLI entrypoints typically define `CITOMNI_APP_PATH` and `CITOMNI_ENVIRONMENT`. `CITOMNI_PUBLIC_PATH` is HTTP-only.
+> **Security note:** Production builds should disable any dev-only providers and never rely on auto-detection for `http.base_url`.
 
 ---
 
@@ -210,7 +230,7 @@ Some keys are intentionally returned as **raw arrays** for performance and ergon
 Currently: `routes`. Example:
 ```php
 $controller = $app->cfg->routes['/']['controller'] ?? null;
-````
+```
 
 This list is considered part of the stable API and may be **extended** in minor versions (never silently removed).
 
@@ -295,7 +315,7 @@ $app->memoryMarker('after-routing');
 
 // Tip: mark boundaries around expensive work;
 // resist the urge to benchmark every semicolon.
-````
+```
 
 **Construction**
 
@@ -517,7 +537,7 @@ $charset = $app->cfg->charset;
 $baseUrl    = $app->cfg->http->base_url;
 $trustProxy = (bool)$app->cfg->http->trust_proxy;
 
-// Lists remain arrays
+// Lists remain arrays (numeric-indexed arrays are not wrapped)
 $locales = $app->cfg->locales ?? ['en'];
 
 // 'routes' intentionally left raw
@@ -596,6 +616,18 @@ return [
 * **Compiled caches (prod)**: pre-merge config & services to `/var/cache/cfg.{http|cli}.php` and `/var/cache/services.{http|cli}.php`.
   Use `$app->warmCache()` to generate them atomically (best-effort `opcache_invalidate()`).
 
+> For production images/pipelines, prefer `composer install --no-dev --classmap-authoritative`.
+
+## Operational KPIs to track
+
+* **TTFB (p50/p95)** per route
+* **CPU ms/request** (app layer only)
+* **RSS memory/request** (steady-state)
+* **Requests per core** at target p95 latency
+* **Energy per 1k requests** (if you can meter at the host or rack level)
+
+Tip: use `App::memoryMarker()` around hot paths to validate improvements rather than guessing.
+
 ### Compiled cache: Deploy snippet
 
 Warm caches atomically during deploy (HTTP and CLI as needed):
@@ -607,7 +639,7 @@ $app->warmCache(overwrite: true, opcacheInvalidate: true);
 // If you also use CLI:
 $cli = new \CitOmni\Kernel\App(__DIR__ . '/../config', \CitOmni\Kernel\Mode::CLI);
 $cli->warmCache(overwrite: true, opcacheInvalidate: true);
-````
+```
 
 Ensure the process can write to `<appRoot>/var/cache/` and that your deploy invalidates OPcache (either via `opcache_invalidate()` as above or a full `opcache_reset()`).
 
@@ -634,7 +666,7 @@ CitOmni Testing is an integrated, dev-only toolkit for running correctness, regr
 1) Install (dev only):
 ```bash
 composer require --dev citomni/testing
-````
+```
 
 2. Enable the provider in `/config/providers.php` **only in dev**:
 
