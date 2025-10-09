@@ -157,10 +157,14 @@ citomni/kernel/
 │  │  └─ BaseController.php   # Thin abstract base - provides $this->app and a second array arg (route/options config)
 │  ├─ Model/
 │  │  └─ BaseModel.php        # Thin abstract base - provides $this->app and a second array arg (options/config)
-│  └─ Service/
-│     └─ BaseService.php      # Thin abstract base - provides $this->app and a second array arg (options/config)
-└─ tests/                      # Unit/integration tests (see CitOmni Testing: [https://github.com/citomni/testing](https://github.com/citomni/testing))
-
+│  ├─ Service/
+│  │  └─ BaseService.php      # Thin abstract base - provides $this->app and a second array arg (options/config)
+│  └─ Command/
+│     └─ BaseCommand.php      # Thin abstract base - provides $this->app and a second array arg (options/config)
+└─ tests/                     # Unit/integration tests (see CitOmni Testing: [https://github.com/citomni/testing](https://github.com/citomni/testing))
+   └─ Command/
+      └─ BaseCommandTest.php
+ 
 ```
 
 PSR-4: `"CitOmni\\Kernel\\": "src/"`.
