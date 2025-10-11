@@ -785,7 +785,8 @@ All CitOmni and LiteX projects follow the shared conventions documented here:
 See: [LICENSE](LICENSE).
 
 **Trademark notice:** "CitOmni" and the CitOmni logo are trademarks of **Lars Grove Mortensen**.  
-You may not use the CitOmni name or logo to imply endorsement or affiliation without prior written permission.
+Usage of the name or logo must follow the policy in **[NOTICE](NOTICE)**. Do not imply endorsement or
+affiliation without prior written permission.
 
 ### FAQ (licensing)
 
@@ -802,13 +803,14 @@ No. The name "CitOmni" and the logo are protected by trademark. Do not suggest s
 
 ## Trademarks
 
-"CitOmni" and the CitOmni logo are trademarks of Lars Grove Mortensen; factual references are allowed, but do not modify the marks, create confusingly similar logos, or imply endorsement.
+See **[NOTICE](NOTICE)** for the CitOmni trademark policy (permitted descriptive use, no endorsement,
+no confusing similarity, registration restrictions).
 
 ---
 
 ## Author
 
-Developed by **Lars Grove Mortensen** © 2012-2025
+Developed by **Lars Grove Mortensen** © 2012-present
 Contributions and pull requests are welcome!
 
 ---
