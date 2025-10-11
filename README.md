@@ -48,7 +48,7 @@ This yields:
 The core runtime achieves near-floor CPU and memory costs per request on commodity shared infrastructure, sustaining hundreds of RPS per worker with extremely low footprint.
 
 See the full test report here:
-[CitOmni Capacity & Green-by-Design Test Report (2025-10-02)](https://github.com/citomni/.github/blob/main/docs/CitOmni_Framework_-Capacity_and_Green_by_Design_Test_Report-2025-10-02.md)
+[CitOmni Docs → /reports/2025-10-02-capacity-and-green-by-design.md](https://github.com/citomni/docs/blob/main/reports/2025-10-02-capacity-and-green-by-design.md)
 
 
 ---
@@ -129,11 +129,11 @@ require CITOMNI_APP_PATH . '/vendor/autoload.php';
 
 ## Further reading
 
-- **Runtime / Execution Mode Layer** — architectural rationale for HTTP vs CLI, baseline ownership, merge order, and why we don’t add more modes.  
-  _Doc:_ [`docs/CitOmni_Runtime_(aka_Execution)_Mode_Layer.md`](docs/CitOmni_Runtime_(aka_Execution)_Mode_Layer.md)
+- **Runtime / Execution Mode Layer** — architectural rationale for HTTP vs CLI, baseline ownership, deterministic config/service merging, and why CitOmni deliberately supports only two execution modes.  
+  _Doc:_ [`concepts/runtime-modes.md`](https://github.com/citomni/docs/blob/main/concepts/runtime-modes.md)
 
-- **Provider Packages: Design, Semantics, and Best Practices** — how providers contribute `MAP_*` and `CFG_*`, routes, precedence rules, versioning, and testing guidance.  
-  _Doc:_ [`docs/CitOmni_Provider_Packages_(Design_Semantics_and_Best_Practices).md`](docs/CitOmni_Provider_Packages_(Design_Semantics_and_Best_Practices).md)
+- **Provider Packages: Design, Semantics, and Best Practices** — explains how provider packages contribute `MAP_*` and `CFG_*` definitions, routes, precedence rules, and versioning; includes guidance on testing, consistency, and conflict avoidance.  
+  _Doc:_ [`concepts/services-and-providers.md`](https://github.com/citomni/docs/blob/main/concepts/services-and-providers.md)
 
 ---
 
@@ -775,7 +775,7 @@ Ensure files exist at:
 ## Coding & Documentation Conventions
 
 All CitOmni and LiteX projects follow the shared conventions documented here:
-[CitOmni Coding & Documentation Conventions](https://github.com/citomni/kernel/blob/main/docs/CONVENTIONS.md)
+[CitOmni Coding & Documentation Conventions](https://github.com/citomni/docs/blob/main/contribute/CONVENTIONS.md)
 
 ---
 
@@ -803,8 +803,11 @@ No. The name "CitOmni" and the logo are protected by trademark. Do not suggest s
 
 ## Trademarks
 
-See **[NOTICE](NOTICE)** for the CitOmni trademark policy (permitted descriptive use, no endorsement,
-no confusing similarity, registration restrictions).
+"CitOmni" and the CitOmni logo are trademarks of **Lars Grove Mortensen**.  
+You may make factual references to "CitOmni", but do not modify the marks, create confusingly similar logos,  
+or imply sponsorship, endorsement, or affiliation without prior written permission.  
+Do not register or use "citomni" (or confusingly similar terms) in company names, domains, social handles, or top-level vendor/package names.  
+For details, see the project's [NOTICE](NOTICE).
 
 ---
 
