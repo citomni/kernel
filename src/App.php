@@ -1,12 +1,16 @@
 <?php
 declare(strict_types=1);
 /*
- * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (C) 2012-2025 Lars Grove Mortensen
+ * This file is part of the CitOmni framework.
+ * Low overhead, high performance, ready for anything.
  *
- * CitOmni Kernel - Deterministic core for high-performance CitOmni apps.
- * Source:  https://github.com/citomni/kernel
- * License: See the LICENSE file for full terms.
+ * For more information, visit https://github.com/citomni
+ *
+ * Copyright (c) 2012-present Lars Grove Mortensen
+ * SPDX-License-Identifier: MIT
+ *
+ * For full copyright, trademark, and license information,
+ * please see the LICENSE file distributed with this source code.
  */
 
 namespace CitOmni\Kernel;
@@ -104,7 +108,7 @@ use CitOmni\Kernel\Arr;
  *   $app = new \CitOmni\Kernel\App(__DIR__ . '/config', \CitOmni\Kernel\Mode::CLI);
  *   $app->warmCache(); // compile cfg/services caches for CLI mode
  */
-class App {  // Keep it not-final due to test-ability and extendability 
+final class App {
 
 	/** Public read-only configuration. */
 	public readonly Cfg $cfg;

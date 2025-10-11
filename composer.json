@@ -2,7 +2,7 @@
 	"name": "citomni/kernel",
 	"description": "Ultra-lean application kernel for CitOmni-based apps. PHP 8.2+, PSR-4, deterministic boot, zero runtime magic.",
 	"type": "library",
-	"license": "GPL-3.0-or-later",
+	"license": "MIT",
 	"homepage": "https://github.com/citomni/kernel",
 	"keywords": ["citomni", "kernel", "framework", "frameworks", "framework-php", "php-framework", "psr-4", "php8", "performance", "high-performance", "deterministic", "deterministic-merge", "service-locator", "service-map", "lazy-loading", "low-overhead", "lightweight", "lightweight-framework", "microkernel", "microframework"],
 	"require": {

@@ -781,8 +781,22 @@ All CitOmni and LiteX projects follow the shared conventions documented here:
 
 ## License
 
-**CitOmni Kernel** is released under the **GNU General Public License v3.0 or later**.
-See [LICENSE](LICENSE) for details.
+**CitOmni Kernel** is open-source under the **MIT License**.  
+See: [LICENSE](LICENSE).
+
+**Trademark notice:** "CitOmni" and the CitOmni logo are trademarks of **Lars Grove Mortensen**.  
+You may not use the CitOmni name or logo to imply endorsement or affiliation without prior written permission.
+
+### FAQ (licensing)
+
+**Can I build proprietary providers/plugins on top of CitOmni?**  
+Yes. Providers/apps may be distributed under any terms (including proprietary). MIT places no copyleft obligations on your code.
+
+**Do I need to keep attribution?**  
+Yes. Keep the copyright and license notice from `LICENSE` in distributions of the Software.
+
+**Can I call my product "CitOmni <Something>"?**  
+No. The name "CitOmni" and the logo are protected by trademark. Do not suggest sponsorship, endorsement, or affiliation without permission.
 
 ---
 
