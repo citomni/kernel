@@ -129,10 +129,10 @@ require CITOMNI_APP_PATH . '/vendor/autoload.php';
 
 ## Further reading
 
-- **Runtime / Execution Mode Layer** — architectural rationale for HTTP vs CLI, baseline ownership, deterministic config/service merging, and why CitOmni deliberately supports only two execution modes.  
+- **Runtime / Execution Mode Layer** - architectural rationale for HTTP vs CLI, baseline ownership, deterministic config/service merging, and why CitOmni deliberately supports only two execution modes.  
   _Doc:_ [`concepts/runtime-modes.md`](https://github.com/citomni/docs/blob/main/concepts/runtime-modes.md)
 
-- **Provider Packages: Design, Semantics, and Best Practices** — explains how provider packages contribute `MAP_*` and `CFG_*` definitions, routes, precedence rules, and versioning; includes guidance on testing, consistency, and conflict avoidance.  
+- **Provider Packages: Design, Semantics, and Best Practices** - explains how provider packages contribute `MAP_*` and `CFG_*` definitions, routes, precedence rules, and versioning; includes guidance on testing, consistency, and conflict avoidance.  
   _Doc:_ [`concepts/services-and-providers.md`](https://github.com/citomni/docs/blob/main/concepts/services-and-providers.md)
 
 ---
