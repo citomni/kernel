@@ -298,35 +298,56 @@ final class App {
 
 
 	/**
-	 * Build runtime configuration:
+	 * Build runtime configuration (deterministic, fail-fast).
+	 *
+	 * Merge order ("last wins" for associative keys):
 	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Config::CFG | \CitOmni\Cli\Boot\Config::CFG
 	 *   2) Providers (whitelist in /config/providers.php): merge CFG_HTTP|CFG_CLI constants
 	 *   3) App base cfg: /config/citomni_{http|cli}_cfg.php
-	 *   4) App env overlay: /config/citomni_{http|cli}_cfg.{ENV}.php <- last wins
+	 *   4) App env overlay: /config/citomni_{http|cli}_cfg.{ENV}.php  ← last wins
 	 *
-	 * @return array<string,mixed>
+	 * Behavior:
+	 * - Pure read path: includes local config files and merges them; no cache writes, no side effects.
+	 * - Fail fast on invalid provider list entries or missing provider classes.
+	 * - Normalizes each included structure before merging (consistent array/object handling).
+	 * - If $env is null, the effective environment is taken from CITOMNI_ENVIRONMENT (default "prod").
+	 *   Otherwise, the provided $env ("dev"|"stage"|"prod") is used to synthesize that env's config.
+	 *
+	 * Notes:
+	 * - Intended for boot and dev-only introspection. At runtime, prefer $this->cfg for reads.
+	 * - Merge is associative, recursive, and deterministic (providers order as listed in providers.php).
+	 *
+	 * Typical usage:
+	 *   // Normal boot (uses CITOMNI_ENVIRONMENT):
+	 *   $cfg = $this->buildConfig();
+	 *
+	 *   // From dev, synthesize prod without exposing prod endpoints:
+	 *   $prodCfg = $this->buildConfig('prod');
+	 *
+	 * @param string|null $env Environment selector: 'dev'|'stage'|'prod' or null to read from CITOMNI_ENVIRONMENT.
+	 * @return array<string,mixed> Fully merged configuration for the chosen environment.
+	 * @throws \RuntimeException If providers.php is invalid or a listed provider class cannot be found.
 	 */
-	private function buildConfig(): array {
-		
-		// echo __METHOD__ . " was running \n";
-		
+	public function buildConfig(?string $env = null): array {
 		$mode = $this->mode;
 
-		// 1) Mode baseline (no I/O)
+		// 1) Mode baseline (normalize once)
 		$base = match ($mode) {
 			Mode::HTTP => \CitOmni\Http\Boot\Config::CFG,
 			Mode::CLI  => \CitOmni\Cli\Boot\Config::CFG,
 		};
 		$cfg = Arr::normalizeConfig($base);
 
-		// 2) Providers whitelist (I/O: 1 include)
+		// 2) Providers (fail-fast; last wins)
 		$providersFile = $this->configDir . '/providers.php';
 		$providers = \is_file($providersFile) ? require $providersFile : [];
 		if (!\is_array($providers)) {
 			throw new \RuntimeException('providers.php must return an array of FQCN strings.');
 		}
 
-		// 2a) Fold provider CFG constants (CFG_HTTP|CFG_CLI) - last wins per key
+		// 2a) Merge provider CFG (CFG_HTTP|CFG_CLI) in providers.php order.
+		//     Deterministic "last wins" per associative key (recursive).
+		//     Fail fast on invalid/missing provider classes.
 		$constName = ($mode === Mode::HTTP) ? 'CFG_HTTP' : 'CFG_CLI';
 		foreach ($providers as $fqcn) {
 			if (!\is_string($fqcn) || $fqcn === '') {
@@ -337,8 +358,7 @@ final class App {
 			}
 			$constFq = $fqcn . '::' . $constName;
 			if (\defined($constFq)) {
-				/** @var array<string,mixed>|object $pv */
-				$pv = \constant($constFq);
+				$pv  = \constant($constFq); // array|object
 				$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($pv));
 			}
 		}
@@ -346,20 +366,18 @@ final class App {
 		// 3) App base cfg (I/O: 1 include) - last wins
 		$appBaseFile = $this->configDir . ($mode === Mode::HTTP ? '/citomni_http_cfg.php' : '/citomni_cli_cfg.php');
 		if (\is_file($appBaseFile)) {
-			/** @var array<string,mixed>|object $appCfg */
-			$appCfg = require $appBaseFile;
+			$appCfg = require $appBaseFile; // array|object
 			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($appCfg));
 		}
 
 		// 4) App env overlay (I/O: 1 include) - last wins
-		$env = \defined('CITOMNI_ENVIRONMENT') ? (string)\CITOMNI_ENVIRONMENT : 'prod';
+		$useEnv = $env ?? (\defined('CITOMNI_ENVIRONMENT') ? (string)\CITOMNI_ENVIRONMENT : 'prod');
 		$appEnvFile = $this->configDir . ($mode === Mode::HTTP
-			? "/citomni_http_cfg.{$env}.php"
-			: "/citomni_cli_cfg.{$env}.php"
+			? "/citomni_http_cfg.{$useEnv}.php"
+			: "/citomni_cli_cfg.{$useEnv}.php"
 		);
 		if (\is_file($appEnvFile)) {
-			/** @var array<string,mixed>|object $envCfg */
-			$envCfg = require $appEnvFile;
+			$envCfg = require $appEnvFile; // array|object
 			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($envCfg));
 		}
 
