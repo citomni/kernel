@@ -103,7 +103,9 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	 * Keys that must always be returned as raw arrays (never wrapped),
 	 * to preserve performance and clear contracts (e.g., routes remain arrays).
 	 */
-	private const RAW_ARRAY_SET = ['routes' => true];
+	private const RAW_ARRAY_SET = [
+		'routes' => true,
+	];
 
 
 
