@@ -19,99 +19,125 @@ use CitOmni\Kernel\Cfg;
 use CitOmni\Kernel\Arr;
 
 /**
- * App: Deterministic application kernel for config & service assembly.
+ * App: Deterministic application kernel for config, routes & service assembly.
  *
  * Responsibilities:
+ *
+ * CONFIG
  * - Build the final configuration with a predictable merge order ("last wins"):
  *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Config::CFG)
- *   2) Provider CFGs (listed in /config/providers.php; CFG_HTTP|CFG_CLI)
+ *   2) Provider CFGs (listed in /config/providers.php; CFG_HTTP | CFG_CLI)
  *   3) App base cfg (/config/citomni_{http|cli}_cfg.php)
- *   4) Env overlay   (/config/citomni_{http|cli}_cfg.{ENV}.php) [optional]
- *   Notes:
- *   - Associative arrays are merged per key; numeric lists are replaced.
- *   - $this->cfg exposes a deep, read-only wrapper; known RAW_ARRAY_KEYS (e.g. 'routes')
- *     are returned as raw arrays for speed and familiarity.
+ *   4) Env overlay (/config/citomni_{http|cli}_cfg.{ENV}.php) [optional]
+ * - Expose the merged config as $this->cfg, which is a deep, read-only Cfg wrapper.
  *
- * - Build the final services map with deterministic precedence (array-union):
- *   app + provider + vendor
- *   1) Vendor Services::MAP (mode-specific)
- *   2) Provider MAP_{HTTP|CLI} overrides
- *   3) /config/services.php overrides win last
+ * ROUTES
+ * - Build the final route table with deterministic merge and explicit skip semantics:
+ *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Routes::MAP_{HTTP|CLI}) [optional]
+ *   2) Provider ROUTES_{HTTP|CLI} constants from classes in /config/providers.php
+ *   3) /config/citomni_{http|cli}_routes.php
+ *   4) /config/citomni_{http|cli}_routes.{ENV}.php  [optional]
  *
- * - Prefer precompiled caches when present to reduce runtime work:
+ *   Merge rule is "last wins" per associative key. Empty arrays are ignored:
+ *   - If a provider/app routes source returns [] (or is undefined), it is skipped entirely
+ *     instead of wiping previous routes.
+ *
+ *   The final merged table is exposed as $this->routes (plain array). Router
+ *   consumes this directly. Routes no longer live inside $this->cfg.
+ *
+ * SERVICES
+ * - Build the final service map with deterministic precedence (array union semantics):
+ *   1) Vendor \CitOmni\{Http|Cli}\Boot\Services::MAP
+ *   2) Provider MAP_{HTTP|CLI} (overrides vendor)
+ *   3) /config/services.php    (overrides everything else)
+ *
+ *   The final map is stored internally. Access is via $this->app->serviceId,
+ *   e.g. $this->app->log, $this->app->request, etc.
+ *
+ * CACHING
+ * - Prefer precompiled caches to reduce runtime work:
  *   <appRoot>/var/cache/cfg.{http|cli}.php
+ *   <appRoot>/var/cache/routes.{http|cli}.php
  *   <appRoot>/var/cache/services.{http|cli}.php
- *   (Each cache file must be a side-effect-free "return [ ... ];")
  *
- * - Provide capability helpers without I/O:
+ *   Each cache file must be side-effect-free and simply `return [ ... ];`.
+ *   The constructor will consume these if present, otherwise it rebuilds.
+ *
+ * CAPABILITY HELPERS
+ * - Provide zero-I/O helpers for feature discovery:
  *   hasService(), hasAnyService(), hasPackage(), hasNamespace(), vardumpServices()
  *
  * Collaborators:
- * - \CitOmni\Http\Boot\Config::CFG, \CitOmni\Cli\Boot\Config::CFG   (read baseline)
- * - Provider classes listed in /config/providers.php                 (read CFG_* and MAP_*)
- * - PHP OPcache (optional, for per-file invalidation after cache writes)
- * - Global constants: CITOMNI_APP_PATH (required), CITOMNI_ENVIRONMENT (optional)
- *
- * Configuration keys:
- * - routes (array)             - Application routes; returned as a raw array (RAW_ARRAY_KEYS).
- * - (generic merged keys)      - App does not require specific keys itself; it merges vendor,
- *                                provider, and app-level configuration deterministically.
+ * - \CitOmni\Http\Boot\Config::CFG / \CitOmni\Cli\Boot\Config::CFG      (baseline cfg)
+ * - \CitOmni\Http\Boot\Routes::MAP_HTTP / \CitOmni\Cli\Boot\Routes::MAP_CLI (baseline routes)
+ * - Provider classes listed in /config/providers.php
+ * - PHP OPcache (optional) for atomic cache updates
+ * - Constants: CITOMNI_APP_PATH (required), CITOMNI_ENVIRONMENT (optional, e.g. "dev","stage","prod")
  *
  * Error handling:
  * - Fail fast on:
- *   - Missing/invalid config dir (constructor)
- *   - Invalid provider class or malformed return types in config/service maps
- *   - Cache write/move failures
+ *   - Missing/invalid config dir
+ *   - Malformed providers.php
+ *   - Missing provider classes referenced in providers.php
+ *   - Invalid return types in cfg/routes/services sources
+ *   - Cache write/move failures in warmCache()
  * - This class does not catch exceptions; errors bubble to the global handler.
  *
  * Typical usage:
  *
- *   // Boot via HTTP Kernel (recommended in web apps)
- *   define('CITOMNI_APP_PATH', __DIR__);                    // app root (no trailing slash)
+ *   // HTTP boot (recommended)
+ *   define('CITOMNI_APP_PATH', __DIR__);          // app root (no trailing slash)
  *   require __DIR__ . '/vendor/autoload.php';
  *   \CitOmni\Http\Kernel::run(__DIR__ . '/public');
  *
- *   // Direct construction (e.g., CLI tooling, tests)
+ *   // Manual construction (tests / CLI scripts)
  *   $app = new \CitOmni\Kernel\App(__DIR__ . '/config', \CitOmni\Kernel\Mode::HTTP);
- *   $baseUrl = $app->cfg->http->base_url ?? null;           // deep, read-only cfg
- *   $view    = $app->view;                                   // lazy service: id => instance
+ *   $baseUrl = $app->cfg->http->base_url ?? null; // deep, read-only cfg
+ *   $view    = $app->view;                        // lazy-resolved service from map
  *
  * Examples:
  *
- *   // Access nested cfg:
+ *   // Access nested cfg (read-only wrapper):
  *   $tz = $app->cfg->locale->timezone ?? 'UTC';
  *
- *   // Note: routes are a raw array
- *   $homeCtrl = $app->cfg->routes['/']['controller'] ?? null;
+ *   // Access route table directly:
+ *   $homeCtrl = $app->routes['/']['controller'] ?? null;
  *
- *   // Capability checks:
- *   if ($app->hasPackage('citomni/auth')) { // render login UI // }
- *   if ($app->hasNamespace('\CitOmni\Infrastructure')) { // enable DB tools // }
+ *   // Capability checks (zero I/O):
+ *   if ($app->hasPackage('citomni/auth')) {
+ *       // auth UI available
+ *   }
+ *   if ($app->hasNamespace('\CitOmni\Infrastructure')) {
+ *       // enable infra tools
+ *   }
  *
- *   // Warm caches (deploy step or admin webhook)
+ *   // Warm caches (deploy step or admin webhook):
  *   $written = $app->warmCache(overwrite: true, opcacheInvalidate: true);
  *
- * Failure:
+ * Failure modes:
  *
- *   // 1) Non-existent /config dir
+ *   // 1) Non-existent /config dir:
  *   new \CitOmni\Kernel\App('/bad/path/config', \CitOmni\Kernel\Mode::HTTP);
- *   // => \RuntimeException (bubbles to global handler)
+ *   // => \RuntimeException
  *
- *   // 2) Malformed providers.php return type
- *   // providers.php returns a string instead of array
- *   // => \RuntimeException ("providers.php must return an array of FQCN strings.")
+ *   // 2) Malformed providers.php:
+ *   // returns non-array or references a missing class
+ *   // => \RuntimeException
  *
- * Standalone (minimal):
+ * Standalone (minimal CLI):
  *
  *   define('CITOMNI_APP_PATH', __DIR__);
  *   require __DIR__ . '/vendor/autoload.php';
  *   $app = new \CitOmni\Kernel\App(__DIR__ . '/config', \CitOmni\Kernel\Mode::CLI);
- *   $app->warmCache(); // compile cfg/services caches for CLI mode
+ *   $app->warmCache(); // compile cfg/routes/services caches for CLI mode
  */
 final class App {
 
 	/** Public read-only configuration. */
 	public readonly Cfg $cfg;
+	
+	/** Public read-only route table (plain array). */
+	public readonly array $routes;
 
 	/** Absolute config dir (.../config). */
 	private string $configDir;
@@ -189,35 +215,47 @@ final class App {
 		$this->mode      = $mode;
 
 		// Resolve cache file names per mode.
-		$suffix   = ($mode === Mode::HTTP) ? 'http' : 'cli';
-		$cacheDir = CITOMNI_APP_PATH . '/var/cache';
-		$cfgCache = $cacheDir . '/cfg.' . $suffix . '.php';
-		$svcCache = $cacheDir . '/services.' . $suffix . '.php';
+		$suffix      = ($mode === Mode::HTTP) ? 'http' : 'cli';
+		$cacheDir    = CITOMNI_APP_PATH . '/var/cache';
+		$cfgCache    = $cacheDir . '/cfg.' . $suffix . '.php';
+		$routesCache = $cacheDir . '/routes.' . $suffix . '.php';
+		$svcCache    = $cacheDir . '/services.' . $suffix . '.php';
 
-		// 1) Load configuration (prefer compiled cache).
+		// 1) Load configuration (prefer compiled cache)
 		if (\is_file($cfgCache)) {
-			$cfgArray = require $cfgCache; // must return array (no side effects)
+			$cfgArray = require $cfgCache; // must return array
 			if (\is_object($cfgArray)) {
 				$cfgArray = (array)$cfgArray;
 			}
 			if (!\is_array($cfgArray)) {
-			// Fallback if cache returned unexpected type
 				$cfgArray = $this->buildConfig();
 			}
 		} else {
 			$cfgArray = $this->buildConfig();
 		}
 
-		// 2) Wrap cfg in deep, read-only adapter (property chaining).
+		// 2) Wrap cfg
 		$this->cfg = new Cfg($cfgArray);
 
-		// 3) Build services map (prefer compiled cache).
+		// 3) Load routes (prefer compiled cache)
+		if (\is_file($routesCache)) {
+			$routesArray = require $routesCache; // must return array
+			if (!\is_array($routesArray)) {
+				$routesArray = $this->buildRoutes();
+			}
+		} else {
+			$routesArray = $this->buildRoutes();
+		}
+		$this->routes = $routesArray;
+
+		// 4) Build services map (prefer compiled cache)
 		if (\is_file($svcCache)) {
 			$services = require $svcCache; // must return array
 			$this->services = \is_array($services) ? $services : $this->buildServices();
 		} else {
 			$this->services = $this->buildServices();
 		}
+
 	}
 
 
@@ -386,6 +424,116 @@ final class App {
 
 
 	/**
+	 * Build runtime routes (deterministic, fail-fast).
+	 *
+	 * Merge order ("last wins" for associative keys):
+	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Routes::MAP_HTTP or \CitOmni\Cli\Boot\Routes::MAP_CLI
+	 *      (optional; only merged if defined)
+	 *   2) Providers listed in /config/providers.php: ROUTES_HTTP|ROUTES_CLI
+	 *   3) App base routes:   /config/citomni_{http|cli}_routes.php
+	 *   4) App env overlay:   /config/citomni_{http|cli}_routes.{ENV}.php
+	 *
+	 * Notes:
+	 * - Structure returned here MUST be an array shaped exactly as Router expects
+	 *   (e.g. ['/path' => [...], 'regex' => [ ... ] ]).
+	 * - Pure read path; no cache writes and no side effects.
+	 *
+	 * @return array<string,mixed> Fully merged routes table for the chosen environment.
+	 * @throws \RuntimeException If providers.php is invalid or provider class missing.
+	 */
+	private function buildRoutes(): array {
+		$mode   = $this->mode;
+		$routes = [];
+
+		// 1) Vendor baseline routes (mode-specific)
+		if ($mode === Mode::HTTP && \class_exists(\CitOmni\Http\Boot\Routes::class)) {
+			if (\defined('\CitOmni\Http\Boot\Routes::MAP_HTTP')) {
+				$vendorRoutes = \CitOmni\Http\Boot\Routes::MAP_HTTP;
+				if (\is_array($vendorRoutes) && $vendorRoutes !== []) {
+					$routes = Arr::mergeAssocLastWins(
+						$routes,
+						Arr::normalizeConfig($vendorRoutes)
+					);
+				}
+			}
+		} elseif ($mode === Mode::CLI && \class_exists(\CitOmni\Cli\Boot\Routes::class)) {
+			if (\defined('\CitOmni\Cli\Boot\Routes::MAP_CLI')) {
+				$vendorRoutes = \CitOmni\Cli\Boot\Routes::MAP_CLI;
+				if (\is_array($vendorRoutes) && $vendorRoutes !== []) {
+					$routes = Arr::mergeAssocLastWins(
+						$routes,
+						Arr::normalizeConfig($vendorRoutes)
+					);
+				}
+			}
+		}
+
+		// 2) Provider routes (optional)
+		$providersFile = $this->configDir . '/providers.php';
+		$providers     = \is_file($providersFile) ? require $providersFile : [];
+		if (!\is_array($providers)) {
+			throw new \RuntimeException('providers.php must return an array of FQCN strings.');
+		}
+
+		$routeConst = ($mode === Mode::HTTP) ? 'ROUTES_HTTP' : 'ROUTES_CLI';
+
+		foreach ($providers as $fqcn) {
+			if (!\is_string($fqcn) || $fqcn === '') {
+				throw new \RuntimeException('Invalid provider FQCN in providers.php');
+			}
+			if (!\class_exists($fqcn)) {
+				throw new \RuntimeException("Provider class not found: {$fqcn}");
+			}
+
+			$constFq = $fqcn . '::' . $routeConst;
+			if (\defined($constFq)) {
+				$pvRoutes = \constant($constFq);
+				if (\is_array($pvRoutes) && $pvRoutes !== []) {
+					$routes = Arr::mergeAssocLastWins(
+						$routes,
+						Arr::normalizeConfig($pvRoutes)
+					);
+				}
+			}
+		}
+
+		// 3) App base routes file
+		$appBaseRoutesFile = $this->configDir . ($mode === Mode::HTTP
+			? '/citomni_http_routes.php'
+			: '/citomni_cli_routes.php'
+		);
+		if (\is_file($appBaseRoutesFile)) {
+			$appRoutes = require $appBaseRoutesFile;
+			if (\is_array($appRoutes) && $appRoutes !== []) {
+				$routes = Arr::mergeAssocLastWins(
+					$routes,
+					Arr::normalizeConfig($appRoutes)
+				);
+			}
+		}
+
+		// 4) App env overlay routes file
+		$useEnv = \defined('CITOMNI_ENVIRONMENT') ? (string)\CITOMNI_ENVIRONMENT : 'prod';
+		$appEnvRoutesFile = $this->configDir . ($mode === Mode::HTTP
+			? "/citomni_http_routes.{$useEnv}.php"
+			: "/citomni_cli_routes.{$useEnv}.php"
+		);
+		if (\is_file($appEnvRoutesFile)) {
+			$appEnvRoutes = require $appEnvRoutesFile;
+			if (\is_array($appEnvRoutes) && $appEnvRoutes !== []) {
+				$routes = Arr::mergeAssocLastWins(
+					$routes,
+					Arr::normalizeConfig($appEnvRoutes)
+				);
+			}
+		}
+
+		return $routes;
+	}
+
+
+
+	/**
 	 * Build the final **services map** for the application.
 	 *
 	 * Merge order (deterministic "last-wins"):
@@ -535,58 +683,58 @@ final class App {
 	/**
 	 * Warm (compile) caches for the current mode (HTTP or CLI) and write them atomically.
 	 *
-	 * This produces two cache artifacts under <appRoot>/var/cache:
-	 *   - cfg.{suffix}.php       (merged configuration WITHOUT maintenance key)
-	 *   - services.{suffix}.php  (final services map)
+	 * This produces three cache artifacts under <appRoot>/var/cache:
+	 *   - cfg.{suffix}.php     (merged configuration)
+	 *   - routes.{suffix}.php  (merged route table)
+	 *   - services.{suffix}.php (final service map)
 	 *
-	 * Where {suffix} is "http" or "cli" based on $this->mode.
+	 * {suffix} is "http" or "cli" based on $this->mode.
 	 *
 	 * Behavior:
-	 * - Uses the same builders as runtime (buildConfig(), buildServices()) so output
-	 *   matches what the constructor would compute when no cache is present.
-	 * - Files are written atomically: a unique .tmp file is created and then renamed
-	 *   into place. If $overwrite=false and a target exists, that file is skipped.
-	 * - If $opcacheInvalidate=true, opcache_invalidate() is called for each written
-	 *   file (when available) to avoid stale bytecode in prod without a full reset.
+	 * - Uses the same builders as runtime (buildConfig(), buildRoutes(), buildServices()),
+	 *   so the cache output matches exactly what the constructor would compute without cache.
+	 * - Each cache file is a tiny PHP script that just does `return [ ... ];` with no side effects.
+	 * - Files are written atomically via a temp file + rename. If $overwrite=false and a file
+	 *   already exists, that file is skipped.
+	 * - If $opcacheInvalidate=true and opcache_invalidate() exists, we invalidate each file
+	 *   after replacing it to avoid stale bytecode in prod.
 	 *
 	 * Notes:
-	 * - The App constructor will automatically consume these cache files (if present)
-	 *   instead of rebuilding at runtime.
-	 * - Expect the cache files to contain only `return [ ... ];` and no side effects.
-	 * - Callers should ensure <appRoot>/var/cache is writable in the current env.
-	 * - No exceptions are caught here; failures propagate to the global error handler.
+	 * - The App constructor will automatically consume these cache files if present.
+	 * - Callers must ensure <appRoot>/var/cache is writable in the current environment.
+	 * - No exceptions are caught here; failures bubble up.
 	 *
-	 * Typical usage:
-	 *   // HTTP controller (webhook):
-	 *   $result = $this->app->warmCache();               // overwrite + invalidate OPcache
-	 *
-	 *   // CLI command:
-	 *   $result = $this->app->warmCache(overwrite: true, opcacheInvalidate: true);
-	 *
-	 * @param bool $overwrite           Overwrite existing cache files if they exist.
-	 * @param bool $opcacheInvalidate   Invalidate OPcache for written files (when available).
-	 * @return array{cfg:?string,services:?string} Absolute paths that were written (null = skipped).
+	 * @param bool $overwrite         Overwrite existing cache files if they exist.
+	 * @param bool $opcacheInvalidate Invalidate OPcache for written files (when available).
+	 * @return array{cfg:?string,routes:?string,services:?string} Absolute paths that were written (null = skipped).
 	 */
 	public function warmCache(bool $overwrite = true, bool $opcacheInvalidate = true): array {
 		$suffix   = ($this->mode === Mode::HTTP) ? 'http' : 'cli';
 		$cacheDir = CITOMNI_APP_PATH . '/var/cache';
 		$cfgFile  = $cacheDir . '/cfg.' . $suffix . '.php';
+		$routeFile= $cacheDir . '/routes.' . $suffix . '.php';
 		$svcFile  = $cacheDir . '/services.' . $suffix . '.php';
 
-		// Ensure cache directory exists.
+		// Ensure cache dir exists
 		if (!\is_dir($cacheDir) && !@mkdir($cacheDir, 0775, true)) {
 			throw new \RuntimeException("Unable to create cache directory: {$cacheDir}");
 		}
 
-		// 1) Build arrays for current mode (without maintenance).
-		$cfgArray = $this->buildConfig();   // merged vendor -> providers -> app (+ env overlay if supported)
-		$svcArray = $this->buildServices(); // final service map
+		// Build arrays
+		$cfgArray    = $this->buildConfig();    // merged cfg
+		$routesArray = $this->buildRoutes();    // merged routes
+		$svcArray    = $this->buildServices();  // final service map
 
-		// 2) Write atomically.
-		$writtenCfg = $this->writeCacheAtomically($cfgFile, $cfgArray, $overwrite, $opcacheInvalidate);
-		$writtenSvc = $this->writeCacheAtomically($svcFile, $svcArray, $overwrite, $opcacheInvalidate);
+		// Write caches atomically
+		$writtenCfg    = $this->writeCacheAtomically($cfgFile,   $cfgArray,    $overwrite, $opcacheInvalidate);
+		$writtenRoutes = $this->writeCacheAtomically($routeFile, $routesArray, $overwrite, $opcacheInvalidate);
+		$writtenSvc    = $this->writeCacheAtomically($svcFile,   $svcArray,    $overwrite, $opcacheInvalidate);
 
-		return ['cfg' => $writtenCfg, 'services' => $writtenSvc];
+		return [
+			'cfg'     => $writtenCfg,
+			'routes'  => $writtenRoutes,
+			'services'=> $writtenSvc
+		];
 	}
 
 
@@ -717,13 +865,29 @@ final class App {
 			}
 		}
 
-		// 2) Scan route controllers (cheap; from merged cfg)
-		$routes = $this->cfg->toArray()['routes'] ?? [];
+		// 2) Scan route controllers (cheap; from merged routes table)
+		$routes = $this->routes ?? [];
 		if (\is_array($routes)) {
-			foreach ($routes as $route) {
-				$ctrl = \is_array($route) ? ($route['controller'] ?? null) : null;
-				if (\is_string($ctrl) && $this->fqcnToPackageSlug($ctrl) === $slug) {
-					return $this->packageMemo[$slug] = true;
+			foreach ($routes as $path => $route) {
+				if (!\is_array($route)) {
+					continue;
+				}
+				// exact match routes
+				if (isset($route['controller']) && \is_string($route['controller'])) {
+					if ($this->fqcnToPackageSlug($route['controller']) === $slug) {
+						return $this->packageMemo[$slug] = true;
+					}
+				}
+			}
+			// also check regex group if you keep them under $routes['regex']
+			if (isset($routes['regex']) && \is_array($routes['regex'])) {
+				foreach ($routes['regex'] as $regexDef) {
+					if (\is_array($regexDef)) {
+						$ctrl = $regexDef['controller'] ?? null;
+						if (\is_string($ctrl) && $this->fqcnToPackageSlug($ctrl) === $slug) {
+							return $this->packageMemo[$slug] = true;
+						}
+					}
 				}
 			}
 		}
@@ -739,6 +903,7 @@ final class App {
 	 * @return bool True if a service or route controller starts with that prefix.
 	 */
 	public function hasNamespace(string $prefix): bool {
+		
 		$prefix = '\\' . \ltrim($prefix, '\\');
 		if (!\str_ends_with($prefix, '\\')) {
 			$prefix .= '\\';
@@ -749,16 +914,32 @@ final class App {
 				return true;
 			}
 		}
-		$routes = $this->cfg->toArray()['routes'] ?? [];
+		
+		$routes = $this->routes ?? [];
 		if (\is_array($routes)) {
-			foreach ($routes as $route) {
-				$ctrl = \is_array($route) ? ($route['controller'] ?? null) : null;
-				if (\is_string($ctrl) && \str_starts_with($ctrl, $prefix)) {
-					return true;
+			foreach ($routes as $path => $route) {
+				if (\is_array($route)) {
+					if (isset($route['controller']) && \is_string($route['controller'])) {
+						if (\str_starts_with($route['controller'], $prefix)) {
+							return true;
+						}
+					}
+				}
+			}
+			if (isset($routes['regex']) && \is_array($routes['regex'])) {
+				foreach ($routes['regex'] as $regexDef) {
+					if (\is_array($regexDef)) {
+						$ctrl = $regexDef['controller'] ?? null;
+						if (\is_string($ctrl) && \str_starts_with($ctrl, $prefix)) {
+							return true;
+						}
+					}
 				}
 			}
 		}
+
 		return false;
+
 	}
 
 	/**

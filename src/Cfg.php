@@ -18,53 +18,53 @@ namespace CitOmni\Kernel;
 /**
  * Cfg: Read-only deep-access wrapper for configuration arrays.
  *
- * Responsibilities:
- * - Provide ergonomic, immutable access to merged configuration:
- *   1) Property syntax: $cfg->http->base_url (lazy-wrapped Cfg nodes, memoized)
- *   2) Array syntax:    $cfg['http']['base_url'] (also memoized for parity)
- *   3) Lists (0..n-1) returned as plain arrays; associative arrays wrapped
- * - Preserve raw arrays for known high-traffic structures:
- *   - RAW_ARRAY_KEYS (e.g., "routes") are never wrapped for clarity/perf.
- * - Fail fast on unknown keys to surface config mistakes early.
+ * What it does:
+ * - Gives you immutable, ergonomic access to the merged CitOmni config that App built.
+ *   1) Property syntax: $cfg->http->base_url
+ *   2) Array syntax:    $cfg['http']['base_url']
+ *   3) Nested associative arrays become lazy-wrapped Cfg nodes (memoized).
+ *   4) Numeric lists (0..n-1) are returned as plain PHP arrays.
+ *   5) Empty arrays are still wrapped as Cfg nodes so you can safely chain ->toArray().
  *
- * Collaborators:
- * - \CitOmni\Kernel\App (producer; supplies normalized, merged config)
+ * - Keys listed in RAW_ARRAY_SET are always returned as raw arrays for performance /
+ *   clarity. (As of now RAW_ARRAY_SET is intentionally empty because routes have been
+ *   moved out of cfg and onto $app->routes instead.)
  *
- * Configuration keys:
- * - routes (array) - Raw route map; consumers should index like $cfg->routes['/']['controller'].
- * - <any merged key> (mixed) - Vendor/provider/app keys; no special requirements here.
+ * - Fails fast on unknown keys to surface config mistakes early.
+ *
+ * Relationship to App:
+ * - \CitOmni\Kernel\App builds the final merged configuration using deterministic
+ *   "last wins" rules (vendor -> providers -> /config/citomni_http_cfg.php -> env overlay).
+ * - App then wraps that merged array in this Cfg class and exposes it as $app->cfg.
  *
  * Error handling:
- * - \OutOfBoundsException on unknown keys (property or array access).
- * - \LogicException on write attempts via ArrayAccess (immutable by design).
+ * - \OutOfBoundsException if you access an unknown config key (property or array syntax).
+ * - \LogicException on any write attempt (Cfg is immutable by design).
+ * - \UnexpectedValueException if a RAW_ARRAY_SET key is not actually an array.
  *
  * Typical usage:
  *
- *   $baseUrl = $app->cfg->http->base_url ?? null;         // property chaining
- *   $tz      = $app->cfg->locale->timezone ?? 'UTC';       // nested node as Cfg
- *   $routes  = $app->cfg->routes;                          // raw array (special-case)
- *   $charset = $app->cfg['locale']['charset'] ?? 'UTF-8';  // array syntax (memoized)
+ *   $baseUrl = $app->cfg->http->base_url ?? null;        // property chaining
+ *   $tz      = $app->cfg->locale->timezone ?? 'UTC';     // nested node (Cfg)
+ *   $charset = $app->cfg['locale']['charset'] ?? 'UTF-8';// array syntax, same semantics
  *
- * Examples:
- *   // Reading nested mail config via properties:
- *   $from = $app->cfg->mail->from->email ?? '';
+ *   // still works even if 'mail' was merged in as an empty array:
+ *   $mailCfg = $app->cfg->mail->toArray();               // []
  *
- *   // Mixed access:
- *   $optIn = ($app->cfg['features']['newsletter'] ?? false) === true;
+ * Capability hint:
+ *   if ($app->hasService('mailer')) { /send email/ }
  *
- * Failure:
- *   // Predictable failure on unknown key; bubbles to global error handler
- *   $x = $app->cfg->not_a_key; // throws \OutOfBoundsException
+ * Manual construction (tests / sandbox):
  *
- * Standalone (only if necessary):
- *   // Normally created by App; for tests/sandboxes:
  *   $cfg = new \CitOmni\Kernel\Cfg([
  *       'http'   => ['base_url' => 'https://example.com'],
  *       'locale' => ['timezone' => 'Europe/Copenhagen', 'charset' => 'UTF-8'],
- *       'routes' => ['/' => ['controller' => Foo::class, 'action' => 'index']],
+ *       'mail'   => [], // empty arrays become nested Cfg nodes, so chaining is still safe
  *   ]);
+ *
  *   echo $cfg->http->base_url;           // "https://example.com"
- *   $r = $cfg->routes;                    // raw array
+ *   $zone = $cfg->locale->timezone;      // "Europe/Copenhagen"
+ *   $mail = $cfg->mail->toArray();       // []
  */
 final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	
@@ -77,7 +77,6 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
  *   Keep normalized config data and a tiny memo cache for nested nodes.
  *
  * NOTES
- *   - RAW_ARRAY_SET keys (e.g. 'routes') are always returned as raw arrays.
  *   - Memoization avoids re-wrapping associative arrays on hot paths.
  */
 	
@@ -100,12 +99,16 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	
 	
 	/**
-	 * Keys that must always be returned as raw arrays (never wrapped),
-	 * to preserve performance and clear contracts (e.g., routes remain arrays).
+	 * Keys that must always be returned as raw arrays (never wrapped).
+	 *
+	 * Historically this included "routes", because routing tables were exposed
+	 * via $app->cfg->routes and consumers indexed them directly as arrays.
+	 *
+	 * Routes now live on $app->routes instead, so RAW_ARRAY_SET is intentionally
+	 * empty in current CitOmni. Leaving the mechanism in place keeps BC if we ever
+	 * decide another high-traffic key should bypass wrapping.
 	 */
-	private const RAW_ARRAY_SET = [
-		'routes' => true,
-	];
+	private const RAW_ARRAY_SET = [];
 
 
 
@@ -191,37 +194,32 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	/**
 	 * Magic property accessor for configuration nodes.
 	 *
-	 * Returns either a wrapped configuration node (Cfg), a raw array, or a scalar
-	 * depending on the stored value and key-specific contracts. Designed for
-	 * predictable, low-overhead access with memoization on hot paths.
+	 * Returns either:
+	 * - a wrapped configuration node (Cfg),
+	 * - a raw array,
+	 * - or a scalar,
+	 * depending on the stored value and key-specific contract.
 	 *
 	 * Behavior:
 	 * - Fail fast on unknown keys: throws \OutOfBoundsException.
-	 * - Keys in RAW_ARRAY_SET (e.g., "routes") are always returned as **raw arrays**
-	 *   (even when empty). If such a key does not hold an array, throws
-	 *   \UnexpectedValueException.
+	 * - Keys listed in RAW_ARRAY_SET are always returned as raw arrays. If such a
+	 *   key does not actually hold an array, \UnexpectedValueException is thrown.
+	 *   (RAW_ARRAY_SET is currently empty in core CitOmni, see class doc.)
 	 * - For other array values:
-	 *     - Empty arrays **or** associative arrays -> wrapped as a Cfg node (memoized).
+	 *     - Empty arrays OR associative arrays -> wrapped as a Cfg node and memoized.
 	 *     - Numeric lists (0..n-1) -> returned as raw arrays.
 	 * - Non-array values (scalars) are returned as-is.
 	 *
 	 * Notes:
-	 * - Memoization ensures repeated access to the same nested node does not re-wrap.
-	 * - Deterministic "last wins" merging means an environment overlay like
-	 *   `'http' => []` produces an empty Cfg node (so `$cfg->http->toArray()` is safe),
-	 *   while `'routes' => []` remains a raw array by contract.
-	 * - RAW_ARRAY_SET exists to keep specific collections (e.g., routing tables)
-	 *   as plain arrays for performance and simplicity.
-	 *
-	 * Typical usage:
-	 *   $baseUrl = $cfg->http->base_url ?? null;       // nested node access
-	 *   $http    = isset($cfg->http) ? $cfg->http->toArray() : [];
-	 *   $routes  = $cfg->routes;                       // raw array by contract
+	 * - Memoization means repeated access to the same nested node does not re-wrap.
+	 * - Deterministic "last wins" merge rules mean environment overlays can collapse
+	 *   nodes to empty arrays. Those still become valid Cfg nodes, so chaining like
+	 *   `$cfg->mail->toArray()` is always safe.
 	 *
 	 * @param string $key Existing configuration key at this node.
 	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
-	 * @throws \OutOfBoundsException   If the key does not exist at this node.
-	 * @throws \UnexpectedValueException If a RAW_ARRAY_SET key does not hold an array.
+	 * @throws \OutOfBoundsException      If the key does not exist at this node.
+	 * @throws \UnexpectedValueException  If a RAW_ARRAY_SET key does not hold an array.
 	 */
 	public function __get(string $key): mixed {
 		if (!\array_key_exists($key, $this->data)) {
@@ -317,77 +315,27 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 
 
 	/**
-	 * NOTE: This has been replaced by the version below. We will keep this for now, until
-	 *       the new version has been battle tested.
-	 * 
 	 * ArrayAccess read accessor for configuration nodes.
 	 *
 	 * Behavior:
-	 * - Fail fast on unknown keys (throws \OutOfBoundsException).
-	 * - If the value is an array and the offset key is listed in RAW_ARRAY_KEYS (e.g., "routes"),
-	 *   return the raw array (never wrapped).
-	 * - If the value is an associative array, lazily wrap it as a Cfg node and memoize
-	 *   the wrapper instance (same behavior as __get()).
-	 * - Otherwise, return the value as-is (scalars or numeric lists).
-	 *
-	 * Notes:
-	 * - Provides parity with property access while keeping array semantics.
-	 * - If you switch implementation to an associative set (RAW_ARRAY_SET + isset()),
-	 *   update the wording above accordingly.
+	 * - Fail fast on unknown keys: throws \OutOfBoundsException.
+	 * - If the key is in RAW_ARRAY_SET, the underlying value must be an array and is
+	 *   always returned as that raw array (never wrapped). If it's not an array,
+	 *   \UnexpectedValueException is thrown.
+	 * - Otherwise:
+	 *     - Empty arrays or associative arrays are wrapped as Cfg nodes and memoized
+	 *       (parity with __get()).
+	 *     - Numeric lists (0..n-1) are returned as plain arrays.
+	 *     - Scalars are returned as-is.
 	 *
 	 * Typical usage:
 	 *   $charset = $cfg['locale']['charset'] ?? 'UTF-8';
-	 *   $routes  = $cfg['routes']; // raw array by contract
+	 *   $httpCfg = $cfg['http']->toArray();
 	 *
 	 * @param string|int $offset Existing configuration key at this node.
 	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
-	 * @throws \OutOfBoundsException When the key does not exist at this node.
-	 */
-	/* 
-	public function offsetGet(mixed $offset): mixed {
-		if (!\array_key_exists($offset, $this->data)) {
-			throw new \OutOfBoundsException("Unknown cfg key: '{$offset}'");
-		}
-
-		$val = $this->data[$offset];
-
-		// 1) Enforce raw array for specific keys (e.g., routes)
-		if (\is_array($val) && \in_array((string)$offset, self::RAW_ARRAY_KEYS, true)) {
-			return $val;
-		}
-
-		// 2) Wrap associative arrays as Cfg; memoize just like __get()
-		if (\is_array($val) && self::isAssoc($val)) {
-			$key = (string)$offset;
-			return $this->cache[$key] ??= new self($val);
-		}
-
-		return $val;
-	}
-	*/
-
-
-	/**
-	 * ArrayAccess read accessor for configuration nodes.
-	 *
-	 * Behavior:
-	 * - Fail fast on unknown keys (throws \OutOfBoundsException).
-	 * - If the value is an array and the offset key is listed in RAW_ARRAY_SET (e.g., "routes"),
-	 *   return the raw array (never wrapped).
-	 * - If the value is an associative array or an empty array, lazily wrap it as a Cfg node and
-	 *   memoize the wrapper instance (parity with __get()).
-	 * - Otherwise, return the value as-is (scalars or numeric lists).
-	 *
-	 * Notes:
-	 * - Provides parity with property access while keeping array semantics.
-	 *
-	 * Typical usage:
-	 *   $charset = $cfg['locale']['charset'] ?? 'UTF-8';
-	 *   $routes  = $cfg['routes']; // raw array by contract
-	 *
-	 * @param string|int $offset Existing configuration key at this node.
-	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
-	 * @throws \OutOfBoundsException When the key does not exist at this node.
+	 * @throws \OutOfBoundsException     When the key does not exist at this node.
+	 * @throws \UnexpectedValueException If a RAW_ARRAY_SET key is not an array.
 	 */
 	public function offsetGet(mixed $offset): mixed {
 		if (!\array_key_exists($offset, $this->data)) {
