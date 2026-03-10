@@ -260,37 +260,37 @@ final class App {
 
 
 	/**
-	 * Magic accessor for application services.
+	 * Magic accessor for lazily resolved application services.
 	 *
-	 * Enables property-style access:
-	 *   $this->app->log   -> resolves "log" service
-	 *   $this->app->cfg   -> special-case access to configuration wrapper
+	 * Enables property-style access for services registered in the service map:
+	 *   $this->app->log
+	 *   $this->app->router
+	 *   $this->app->response
+	 *
+	 * Note:
+	 * - Declared public properties such as $this->cfg are resolved directly by PHP
+	 *   and do not pass through __get().
 	 *
 	 * Resolution strategy:
-	 * 1. **cfg special case** - Direct access to the App's configuration wrapper
-	 *    without needing a mapping.
-	 * 2. **Cached instance** - If service already constructed, return it from
-	 *    $this->instances cache.
-	 * 3. **Service definition lookup** - Must exist in $this->services
-	 *    (populated by buildServices()).
-	 *    - If definition is a string: treated as FQCN, instantiated with `new $class($this)`.
-	 *    - If definition is an array: must contain 'class' (string) and may
-	 *      contain 'options' (array). Instantiated with `new $class($this, $options)`.
-	 *    - Otherwise: throws RuntimeException (invalid definition).
+	 * 1. **Cached instance** - If the service was already constructed, return it
+	 *    from $this->instances.
+	 * 2. **Service definition lookup** - The service must exist in $this->services.
+	 *    - String definition: treated as FQCN and instantiated as `new $class($this)`.
+	 *    - Array definition: must contain 'class' and may contain 'options';
+	 *      instantiated as `new $class($this, $options)`.
+	 * 3. **Failure** - Throw RuntimeException for unknown or invalid definitions.
 	 *
-	 * Instances are cached in $this->instances to enforce singleton-like
-	 * behavior within the App lifecycle.
-	 *
-	 * @param string $id Service identifier (e.g. "log", "request", "response").
+	 * @param string $id Service identifier.
 	 * @return object Resolved service instance.
-	 * @throws \RuntimeException If the service is unknown or its definition is invalid.
+	 * @throws \RuntimeException If the service is unknown or invalid.
 	 */
 	public function __get(string $id): object {
+		/*
 		if ($id === 'cfg') {
 			// Special-case: allow $this->app->cfg without being declared in services map
-			/** @var object */
 			return $this->cfg;
 		}
+		*/
 
 		// 1) Return cached instance if already constructed
 		if (isset($this->instances[$id])) {
