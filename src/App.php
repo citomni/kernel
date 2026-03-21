@@ -19,37 +19,40 @@ use CitOmni\Kernel\Cfg;
 use CitOmni\Kernel\Arr;
 
 /**
- * App: Deterministic application kernel for config, routes & service assembly.
+ * App: Deterministic application kernel for config, routes, and service assembly.
  *
  * Responsibilities:
  *
  * CONFIG
  * - Build the final configuration with a predictable merge order ("last wins"):
- *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Config::CFG)
- *   2) Provider CFGs (listed in /config/providers.php; CFG_HTTP | CFG_CLI)
+ *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Registry::CFG_{HTTP|CLI})
+ *   2) Provider cfg overlays (listed in /config/providers.php; CFG_HTTP | CFG_CLI)
  *   3) App base cfg (/config/citomni_{http|cli}_cfg.php)
  *   4) Env overlay (/config/citomni_{http|cli}_cfg.{ENV}.php) [optional]
- * - Expose the merged config as $this->cfg, which is a deep, read-only Cfg wrapper.
+ * - Expose the merged configuration as $this->cfg, which is a deep, read-only Cfg wrapper.
  *
  * ROUTES
  * - Build the final route table with deterministic merge and explicit skip semantics:
- *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Routes::MAP_{HTTP|CLI}) [optional]
- *   2) Provider ROUTES_{HTTP|CLI} constants from classes in /config/providers.php
+ *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Registry::ROUTES_{HTTP|CLI}) [optional]
+ *   2) Provider ROUTES_{HTTP|CLI} constants from classes listed in /config/providers.php
  *   3) /config/citomni_{http|cli}_routes.php
- *   4) /config/citomni_{http|cli}_routes.{ENV}.php  [optional]
+ *   4) /config/citomni_{http|cli}_routes.{ENV}.php [optional]
  *
  *   Merge rule is "last wins" per associative key. Empty arrays are ignored:
- *   - If a provider/app routes source returns [] (or is undefined), it is skipped entirely
- *     instead of wiping previous routes.
+ *   - If a provider or app routes source returns [] (or is undefined), it is skipped entirely
+ *     instead of wiping previously merged routes.
  *
  *   The final merged table is exposed as $this->routes (plain array). Router
  *   consumes this directly. Routes no longer live inside $this->cfg.
  *
  * SERVICES
- * - Build the final service map with deterministic precedence (array union semantics):
- *   1) Vendor \CitOmni\{Http|Cli}\Boot\Services::MAP
- *   2) Provider MAP_{HTTP|CLI} (overrides vendor)
- *   3) /config/services.php    (overrides everything else)
+ * - Build the final service map with deterministic precedence (PHP array union; left side wins):
+ *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Registry::MAP_{HTTP|CLI})
+ *   2) Provider MAP_{HTTP|CLI} constants from classes listed in /config/providers.php (overrides vendor)
+ *   3) /config/services.php (overrides everything else)
+ *
+ *   Effective precedence is:
+ *   - app > provider > vendor
  *
  *   The final map is stored internally. Access is via $this->app->serviceId,
  *   e.g. $this->app->log, $this->app->request, etc.
@@ -61,26 +64,27 @@ use CitOmni\Kernel\Arr;
  *   <appRoot>/var/cache/services.{http|cli}.php
  *
  *   Each cache file must be side-effect-free and simply `return [ ... ];`.
- *   The constructor will consume these if present, otherwise it rebuilds.
+ *   The constructor will consume these if present; otherwise it rebuilds.
  *
  * CAPABILITY HELPERS
  * - Provide zero-I/O helpers for feature discovery:
  *   hasService(), hasAnyService(), hasPackage(), hasNamespace(), vardumpServices()
  *
  * Collaborators:
- * - \CitOmni\Http\Boot\Config::CFG / \CitOmni\Cli\Boot\Config::CFG      (baseline cfg)
- * - \CitOmni\Http\Boot\Routes::MAP_HTTP / \CitOmni\Cli\Boot\Routes::MAP_CLI (baseline routes)
+ * - \CitOmni\Http\Boot\Registry::CFG_HTTP / \CitOmni\Cli\Boot\Registry::CFG_CLI         (baseline cfg)
+ * - \CitOmni\Http\Boot\Registry::ROUTES_HTTP / \CitOmni\Cli\Boot\Registry::ROUTES_CLI   (baseline routes)
+ * - \CitOmni\Http\Boot\Registry::MAP_HTTP / \CitOmni\Cli\Boot\Registry::MAP_CLI         (baseline services)
  * - Provider classes listed in /config/providers.php
  * - PHP OPcache (optional) for atomic cache updates
- * - Constants: CITOMNI_APP_PATH (required), CITOMNI_ENVIRONMENT (optional, e.g. "dev","stage","prod")
+ * - Constants: CITOMNI_APP_PATH (required), CITOMNI_ENVIRONMENT (optional, e.g. "dev", "stage", "prod")
  *
  * Error handling:
  * - Fail fast on:
- *   - Missing/invalid config dir
+ *   - Missing or invalid config dir
  *   - Malformed providers.php
  *   - Missing provider classes referenced in providers.php
- *   - Invalid return types in cfg/routes/services sources
- *   - Cache write/move failures in warmCache()
+ *   - Invalid return types in cfg, routes, or services sources
+ *   - Cache write or move failures in warmCache()
  * - This class does not catch exceptions; errors bubble to the global handler.
  *
  * Typical usage:
@@ -129,7 +133,7 @@ use CitOmni\Kernel\Arr;
  *   define('CITOMNI_APP_PATH', __DIR__);
  *   require __DIR__ . '/vendor/autoload.php';
  *   $app = new \CitOmni\Kernel\App(__DIR__ . '/config', \CitOmni\Kernel\Mode::CLI);
- *   $app->warmCache(); // compile cfg/routes/services caches for CLI mode
+ *   $app->warmCache(); // compile cfg, routes, and services caches for CLI mode
  */
 final class App {
 
@@ -339,8 +343,8 @@ final class App {
 	 * Build runtime configuration (deterministic, fail-fast).
 	 *
 	 * Merge order ("last wins" for associative keys):
-	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Config::CFG | \CitOmni\Cli\Boot\Config::CFG
-	 *   2) Providers (whitelist in /config/providers.php): merge CFG_HTTP|CFG_CLI constants
+	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Registry::CFG_HTTP | \CitOmni\Cli\Boot\Registry::CFG_CLI
+	 *   2) Providers (listed in /config/providers.php): merge CFG_HTTP|CFG_CLI constants
 	 *   3) App base cfg: /config/citomni_{http|cli}_cfg.php
 	 *   4) App env overlay: /config/citomni_{http|cli}_cfg.{ENV}.php  ← last wins
 	 *
@@ -371,8 +375,8 @@ final class App {
 
 		// 1) Mode baseline (normalize once)
 		$base = match ($mode) {
-			Mode::HTTP => \CitOmni\Http\Boot\Config::CFG,
-			Mode::CLI  => \CitOmni\Cli\Boot\Config::CFG,
+			Mode::HTTP => \CitOmni\Http\Boot\Registry::CFG_HTTP,
+			Mode::CLI  => \CitOmni\Cli\Boot\Registry::CFG_CLI,
 		};
 		$cfg = Arr::normalizeConfig($base);
 
@@ -427,7 +431,7 @@ final class App {
 	 * Build runtime routes (deterministic, fail-fast).
 	 *
 	 * Merge order ("last wins" for associative keys):
-	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Routes::MAP_HTTP or \CitOmni\Cli\Boot\Routes::MAP_CLI
+	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Registry::ROUTES_HTTP or \CitOmni\Cli\Boot\Registry::ROUTES_CLI
 	 *      (optional; only merged if defined)
 	 *   2) Providers listed in /config/providers.php: ROUTES_HTTP|ROUTES_CLI
 	 *   3) App base routes:   /config/citomni_{http|cli}_routes.php
@@ -446,9 +450,9 @@ final class App {
 		$routes = [];
 
 		// 1) Vendor baseline routes (mode-specific)
-		if ($mode === Mode::HTTP && \class_exists(\CitOmni\Http\Boot\Routes::class)) {
-			if (\defined('\CitOmni\Http\Boot\Routes::MAP_HTTP')) {
-				$vendorRoutes = \CitOmni\Http\Boot\Routes::MAP_HTTP;
+		if ($mode === Mode::HTTP && \class_exists(\CitOmni\Http\Boot\Registry::class)) {
+			if (\defined('\CitOmni\Http\Boot\Registry::ROUTES_HTTP')) {
+				$vendorRoutes = \CitOmni\Http\Boot\Registry::ROUTES_HTTP;
 				if (\is_array($vendorRoutes) && $vendorRoutes !== []) {
 					$routes = Arr::mergeAssocLastWins(
 						$routes,
@@ -456,9 +460,9 @@ final class App {
 					);
 				}
 			}
-		} elseif ($mode === Mode::CLI && \class_exists(\CitOmni\Cli\Boot\Routes::class)) {
-			if (\defined('\CitOmni\Cli\Boot\Routes::MAP_CLI')) {
-				$vendorRoutes = \CitOmni\Cli\Boot\Routes::MAP_CLI;
+		} elseif ($mode === Mode::CLI && \class_exists(\CitOmni\Cli\Boot\Registry::class)) {
+			if (\defined('\CitOmni\Cli\Boot\Registry::ROUTES_CLI')) {
+				$vendorRoutes = \CitOmni\Cli\Boot\Registry::ROUTES_CLI;
 				if (\is_array($vendorRoutes) && $vendorRoutes !== []) {
 					$routes = Arr::mergeAssocLastWins(
 						$routes,
@@ -536,9 +540,10 @@ final class App {
 	/**
 	 * Build the final **services map** for the application.
 	 *
-	 * Merge order (deterministic "last-wins"):
-	 * 1. **Mode baseline** - static vendor defaults from CitOmni\Http\Boot\Services::MAP
-	 *    or CitOmni\Cli\Boot\Services::MAP depending on runtime mode.
+	 * Merge precedence (deterministic PHP array union; left side wins on key collision):
+	 * 1. **Mode baseline** - static vendor defaults from
+	 *    \CitOmni\Http\Boot\Registry::MAP_HTTP or
+	 *    \CitOmni\Cli\Boot\Registry::MAP_CLI depending on runtime mode.
 	 * 2. **Providers** - external providers listed in /config/providers.php.
 	 *    Each provider class may define a MAP_HTTP or MAP_CLI constant.
 	 *    If present, those entries override vendor baseline for same IDs.
@@ -562,11 +567,11 @@ final class App {
 
 		// 1) Start from vendor baseline map depending on runtime mode
 		$map = match ($mode) {
-			Mode::HTTP => \CitOmni\Http\Boot\Services::MAP,
-			Mode::CLI  => \CitOmni\Cli\Boot\Services::MAP,
+			Mode::HTTP => \CitOmni\Http\Boot\Registry::MAP_HTTP,
+			Mode::CLI  => \CitOmni\Cli\Boot\Registry::MAP_CLI,
 		};
 		if (!\is_array($map)) {
-			throw new \RuntimeException('Vendor Services::MAP must be an array.');
+			throw new \RuntimeException('Vendor Registry::MAP_{HTTP|CLI} must be an array.');
 		}
 
 		// 2) Load providers (optional) from config/providers.php
@@ -625,15 +630,16 @@ final class App {
  * CONFIG/SERVICE CACHE - Deterministic, atomic, prod-grade
  *---------------------------------------------------------------
  * PURPOSE
- * Compile CitOmni's merged configuration and service map into tiny PHP
- * files for zero-overhead runtime. The App constructor will prefer these
+ * Compile CitOmni's merged configuration, route table, and service map into tiny 
+ * PHP files for zero-overhead runtime. The App constructor will prefer these
  * artifacts when present, avoiding repeated merge work on every request.
  *
  * WHAT IT DOES
  * - warmCache(bool $overwrite=true, bool $opcacheInvalidate=true)
  *     • Builds the *exact* same arrays as runtime (no special paths)
- *     • Writes two artifacts under <appRoot>/var/cache:
+ *     • Writes three artifacts under <appRoot>/var/cache:
  *         - cfg.{http|cli}.php        (merged configuration)
+ *         - routes.{http|cli}.php     (merged route table)
  *         - services.{http|cli}.php   (final service map)
  *     • Returns absolute paths written (null = skipped when overwrite=false)
  *     • Optionally invalidates OPcache for the written files
@@ -652,7 +658,7 @@ final class App {
  * - Deterministic "last-wins" merge: vendor -> providers.php -> app (+ env overlay)
  * - Maintenance flag is intentionally *not* baked into cfg cache. It is enforced
  *   at runtime so you can toggle maintenance without regenerating caches.
- * - No hidden side effects in cache files-each simply returns an array
+ * - No hidden side effects in cache files; each simply returns an array
  * - Errors are not swallowed; failures bubble to the global error handler
  *
  * PRODUCTION NOTES
