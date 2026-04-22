@@ -344,6 +344,7 @@ abstract class BaseCommand {
 		\fwrite(\STDOUT, $line . \PHP_EOL);
 	}
 
+
 	/**
 	 * Write a line to stderr.
 	 */
@@ -351,32 +352,48 @@ abstract class BaseCommand {
 		\fwrite(\STDERR, $line . \PHP_EOL);
 	}
 
+
 	/**
 	 * Write an informational message to stdout.
 	 */
+	// protected function info(string $message): void {
+		// $this->stdout($this->color('34', '[info]', false) . " {$message}");
+	// }
 	protected function info(string $message): void {
-		$this->stdout($this->color('34', '[info]', false) . " {$message}");
+		$this->stdout($this->color('34', $message, false));
 	}
+	
 
 	/**
 	 * Write a success message to stdout.
 	 */
+	// protected function success(string $message): void {
+		// $this->stdout($this->color('32', '[ok]', false) . " {$message}");
+	// }
 	protected function success(string $message): void {
-		$this->stdout($this->color('32', '[ok]', false) . " {$message}");
+		$this->stdout($this->color('32', $message, false));
 	}
+	
 
 	/**
 	 * Write a warning message to stderr.
 	 */
+	// protected function warning(string $message): void {
+		// $this->stderr($this->color('33', '[warning]', true) . " {$message}");
+	// }
 	protected function warning(string $message): void {
-		$this->stderr($this->color('33', '[warning]', true) . " {$message}");
-	}
+		$this->stderr($this->color('33', $message, true));
+	}	
+	
 
 	/**
 	 * Write an error message to stderr.
 	 */
+	// protected function error(string $message): void {
+		// $this->stderr($this->color('31', '[error]', true) . " {$message}");
+	// }
 	protected function error(string $message): void {
-		$this->stderr($this->color('31', '[error]', true) . " {$message}");
+		$this->stderr($this->color('31', $message, true));
 	}
 
 
