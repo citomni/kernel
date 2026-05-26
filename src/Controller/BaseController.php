@@ -18,7 +18,7 @@ namespace CitOmni\Kernel\Controller;
 use CitOmni\Kernel\App;
 
 /**
- * BaseController: Minimal, cross-mode base for controllers (HTTP/CLI).
+ * BaseController: Minimal transport adapter base for HTTP controllers.
  *
  * Responsibilities:
  * - Expose the application container ($app) for services and config.
@@ -28,7 +28,6 @@ use CitOmni\Kernel\App;
  * Behavior:
  * - Constructor stores $app and $routeConfig.
  * - If the child defines init(), it is called automatically (method_exists guard).
- * - No HTTP specifics here; HTTP packages may extend or compose this base.
  *
  * Collaborators:
  * - \CitOmni\Kernel\App (read-only access to services: $this->app->id).
