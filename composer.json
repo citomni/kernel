@@ -1,10 +1,31 @@
 {
 	"name": "citomni/kernel",
-	"description": "Ultra-lean application kernel for CitOmni-based apps. PHP 8.2+, PSR-4, deterministic boot, zero runtime magic.",
+	"description": "Ultra-lean application kernel for CitOmni-based apps. PHP, PSR-4, deterministic boot, zero runtime magic.",
 	"type": "library",
 	"license": "MIT",
 	"homepage": "https://github.com/citomni/kernel",
-	"keywords": ["citomni", "kernel", "framework", "frameworks", "framework-php", "php-framework", "psr-4", "php8", "performance", "high-performance", "deterministic", "deterministic-merge", "service-locator", "service-map", "lazy-loading", "low-overhead", "lightweight", "lightweight-framework", "microkernel", "microframework"],
+	"keywords": [
+		"citomni",
+		"kernel",
+		"framework",
+		"frameworks",
+		"framework-php",
+		"php-framework",
+		"psr-4",
+		"php8",
+		"performance",
+		"high-performance",
+		"deterministic",
+		"deterministic-merge",
+		"service-locator",
+		"service-map",
+		"lazy-loading",
+		"low-overhead",
+		"lightweight",
+		"lightweight-framework",
+		"microkernel",
+		"microframework"
+	],
 	"require": {
 		"php": "^8.2"
 	},
@@ -29,7 +50,7 @@
 		"citomni/http": "HTTP runtime: Kernel+router+request/response+error handler for web apps",
 		"citomni/cli": "CLI runtime: Kernel+command runner with the same deterministic boot",
 		"citomni/infrastructure": "Shared infra services (db, log, mail, txt) for HTTP & CLI",
-		"citomni/auth": "User accounts, login/registration, and member profile flows",
+		"citomni/authenticate": "User accounts, login, registration, password lifecycle, MFA, trusted devices, and member profile flows.",
 		"citomni/testing": "Dev-only integration test harness; zero prod overhead"
 	},
 	"support": {
@@ -63,5 +84,10 @@
 			"/.vscode",
 			"/Makefile"
 		]
+	},
+	"extra": {
+		"branch-alias": {
+			"dev-main": "1.0.x-dev"
+		}
 	}
 }
