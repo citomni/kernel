@@ -88,6 +88,9 @@
 	"extra": {
 		"branch-alias": {
 			"dev-main": "1.0.x-dev"
+		},
+		"citomni": {
+			"scaffold": "install/manifest.php"
 		}
 	}
 }
