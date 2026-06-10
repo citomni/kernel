@@ -246,7 +246,7 @@ final class App {
 	public function getConfigDir(): string;
 
 	public function buildConfig(?string $env = null): array;
-	public function warmCache(bool $overwrite = true, bool $opcacheInvalidate = true): array;
+	public function warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array;
 
 	public function hasService(string $id): bool;
 	public function hasAnyService(string ...$ids): bool;
@@ -371,19 +371,26 @@ $app->memoryMarker('after-routing');
 
 CitOmni kernel follows deterministic merge rules.
 
-### Config and routes
+### Config and dispatch maps
 
-For configuration and routes, merge behavior is:
+For configuration and dispatch maps, merge behavior is:
 
 * deep associative merge
 * last wins
 
-Effective order:
+Configuration supports shared provider and app layers before mode-specific overlays. There is no vendor `CFG_COMMON`; the vendor baseline is supplied by the selected mode package.
 
-1. vendor baseline
-2. providers
-3. app base
-4. environment overlay
+Effective config order:
+
+1. vendor mode-specific baseline
+2. provider common cfg, if defined
+3. provider mode-specific cfg, if defined
+4. app common cfg, if present
+5. app mode-specific cfg, if present
+6. app common environment overlay, if present
+7. app mode-specific environment overlay, if present
+
+Dispatch maps remain mode-specific. HTTP uses routes, and CLI uses commands. There is no `ROUTES_COMMON` or `COMMANDS_COMMON`.
 
 ### Services
 
@@ -392,59 +399,110 @@ For services, merge behavior is:
 * PHP array union (`+`)
 * left wins
 
-Effective precedence:
+Service maps support shared provider and app layers before mode-specific overrides. There is no vendor `MAP_COMMON`; the vendor baseline is supplied by the selected mode package.
 
-* app overrides provider
-* provider overrides vendor
+Effective precedence, highest first:
+
+* app mode-specific service file
+* app common service file
+* provider mode-specific service map
+* provider common service map
+* vendor mode-specific service map
 
 In short:
 
-* config/routes: last wins
+* config/dispatch maps: last wins
 * services: left wins
 
 That distinction is intentional and part of the contract.
 
 ## Build sources
 
+Official app skeletons provide these standard config files:
+
+* `config/citomni_cfg.php`
+* `config/services.php`
+* `config/providers.php`
+
+Runtime tolerates missing standard files for backwards compatibility. New apps get them from `citomni/installer`.
+
+Optional app overlays include:
+
+* `config/citomni_cfg.{env}.php`
+* `config/citomni_http_cfg.php`
+* `config/citomni_http_cfg.{env}.php`
+* `config/citomni_cli_cfg.php`
+* `config/citomni_cli_cfg.{env}.php`
+* `config/services_http.php`
+* `config/services_cli.php`
+
 ### Config
 
-`App::buildConfig()` builds config in this order:
+`App::buildConfig()` builds config in this order. Later entries override earlier entries through deep associative merge.
 
-1. mode-package baseline config
-2. provider `CFG_HTTP` / `CFG_CLI`
-3. app config file:
+For HTTP:
 
-   * `config/citomni_http_cfg.php`
-   * `config/citomni_cli_cfg.php`
-4. environment overlay:
+1. mode-package baseline `CFG_HTTP`
+2. provider `CFG_COMMON`, if defined
+3. provider `CFG_HTTP`, if defined
+4. `config/citomni_cfg.php`, if present
+5. `config/citomni_http_cfg.php`, if present
+6. `config/citomni_cfg.{env}.php`, if present
+7. `config/citomni_http_cfg.{env}.php`, if present
 
-   * `config/citomni_http_cfg.{env}.php`
-   * `config/citomni_cli_cfg.{env}.php`
+For CLI:
 
-### Routes
+1. mode-package baseline `CFG_CLI`
+2. provider `CFG_COMMON`, if defined
+3. provider `CFG_CLI`, if defined
+4. `config/citomni_cfg.php`, if present
+5. `config/citomni_cli_cfg.php`, if present
+6. `config/citomni_cfg.{env}.php`, if present
+7. `config/citomni_cli_cfg.{env}.php`, if present
 
-Routes are built in this order:
+Missing app config files are ignored for backwards compatibility. Existing config files must return values accepted by `Arr::normalizeConfig()`. Official scaffolded config files return arrays.
 
-1. mode-package baseline routes
-2. provider `ROUTES_HTTP` / `ROUTES_CLI`
-3. app routes file:
+### Dispatch maps
 
-   * `config/citomni_http_routes.php`
-   * `config/citomni_cli_routes.php`
-4. environment overlay:
+Dispatch maps remain mode-specific and use deep associative merge with last-wins behavior.
 
-   * `config/citomni_http_routes.{env}.php`
-   * `config/citomni_cli_routes.{env}.php`
+HTTP routes are built from:
+
+1. mode-package baseline `ROUTES_HTTP`
+2. provider `ROUTES_HTTP`, if defined
+3. `config/citomni_http_routes.php`, if present
+4. `config/citomni_http_routes.{env}.php`, if present
+
+CLI commands are built from:
+
+1. mode-package baseline `COMMANDS_CLI`
+2. provider `COMMANDS_CLI`, if defined
+3. `config/citomni_cli_commands.php`, if present
+4. `config/citomni_cli_commands.{env}.php`, if present
+
+There are no common dispatch constants. `ROUTES_HTTP` and `COMMANDS_CLI` stay tied to their transport adapters.
 
 ### Services
 
-Services are built in this order:
+Services are built with PHP array union semantics. The first matching service id wins.
 
-1. mode-package baseline map
-2. provider `MAP_HTTP` / `MAP_CLI`
-3. app override file:
+Effective HTTP precedence, highest first:
 
-   * `config/services.php`
+1. `config/services_http.php`, if present
+2. `config/services.php`, if present
+3. provider `MAP_HTTP`, if defined
+4. provider `MAP_COMMON`, if defined
+5. mode-package baseline `MAP_HTTP`
+
+Effective CLI precedence, highest first:
+
+1. `config/services_cli.php`, if present
+2. `config/services.php`, if present
+3. provider `MAP_CLI`, if defined
+4. provider `MAP_COMMON`, if defined
+5. mode-package baseline `MAP_CLI`
+
+Later providers in `config/providers.php` have higher precedence than earlier providers. Existing service files must return arrays.
 
 ## Providers and boot metadata
 
@@ -456,20 +514,24 @@ src/Boot/Registry.php
 
 Typical constants are:
 
+* `MAP_COMMON`
 * `MAP_HTTP`
 * `MAP_CLI`
+* `CFG_COMMON`
 * `CFG_HTTP`
 * `CFG_CLI`
 * `ROUTES_HTTP`
-* `ROUTES_CLI`
+* `COMMANDS_CLI`
 
 All are optional.
 
-Important rule:
+Important rules:
 
 * routes must not be nested inside config constants
+* commands must not be nested inside config constants
+* there is no `ROUTES_COMMON` or `COMMANDS_COMMON`
 
-A provider may contribute only services, only config, only routes, or any combination of the three.
+A provider may contribute only services, only config, only routes, only commands, or any combination of these.
 
 ## Mode-package baseline note
 
@@ -482,7 +544,9 @@ Specifically, it expects mode-specific constants such as:
 
 * `CFG_HTTP` / `CFG_CLI`
 * `MAP_HTTP` / `MAP_CLI`
-* `ROUTES_HTTP` / `ROUTES_CLI`
+* `ROUTES_HTTP` / `COMMANDS_CLI`
+
+There is no vendor `CFG_COMMON` or vendor `MAP_COMMON`. Shared package defaults belong in provider `CFG_COMMON` / `MAP_COMMON` constants or in app-level common files.
 
 So while provider packages are documented via `src/Boot/Registry.php`, the current kernel code also expects Registry-based baseline access from the mode packages it integrates with.
 
@@ -510,7 +574,7 @@ Expected properties:
 
 ### `warmCache()`
 
-`warmCache(bool $overwrite = true, bool $opcacheInvalidate = true): array` rebuilds config, routes, and services, then writes the three cache files atomically.
+`warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array` rebuilds config, dispatch, and services, then writes the three cache files atomically.
 
 Returned shape:
 

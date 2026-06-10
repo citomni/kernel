@@ -26,9 +26,12 @@ use CitOmni\Kernel\Arr;
  * CONFIG
  * - Build the final configuration with a predictable merge order ("last wins"):
  *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Registry::CFG_{HTTP|CLI})
- *   2) Provider cfg overlays (listed in /config/providers.php; CFG_HTTP | CFG_CLI)
- *   3) App base cfg (/config/citomni_{http|cli}_cfg.php)
- *   4) Env overlay (/config/citomni_{http|cli}_cfg.{ENV}.php) [optional]
+ *   2) Provider cfg overlays (listed in /config/providers.php), per provider:
+ *      CFG_COMMON then CFG_{HTTP|CLI} (mode-specific wins)
+ *   3) App common base (/config/citomni_cfg.php) then mode base
+ *      (/config/citomni_{http|cli}_cfg.php) [both optional]
+ *   4) App common env overlay (/config/citomni_cfg.{ENV}.php) then mode env
+ *      overlay (/config/citomni_{http|cli}_cfg.{ENV}.php) [both optional]
  * - Expose the merged configuration as $this->cfg, which is a deep, read-only Cfg wrapper.
  *
  * DISPATCH MAPS (routes and commands)
@@ -46,11 +49,13 @@ use CitOmni\Kernel\Arr;
  * SERVICES
  * - Build the final service map with deterministic precedence (PHP array union; left side wins):
  *   1) Vendor baseline (\CitOmni\{Http|Cli}\Boot\Registry::MAP_{HTTP|CLI})
- *   2) Provider MAP_{HTTP|CLI} constants from classes listed in /config/providers.php (overrides vendor)
- *   3) /config/services.php (overrides everything else)
+ *   2) Provider maps from classes listed in /config/providers.php, per provider:
+ *      MAP_COMMON then MAP_{HTTP|CLI} (mode-specific wins; later providers win)
+ *   3) /config/services.php (common) then /config/services_{http|cli}.php
+ *      (mode-specific wins) - both override everything else
  *
  *   Effective precedence is:
- *   - app > provider > vendor
+ *   - app services_{mode} > app services > provider > vendor
  *
  *   The final map is stored internally. Access is via $this->app->serviceId,
  *   e.g. $this->app->log, $this->app->request, etc.
@@ -343,9 +348,13 @@ final class App {
 	 *
 	 * Merge order ("last wins" for associative keys):
 	 *   1) Mode baseline (vendor): \CitOmni\Http\Boot\Registry::CFG_HTTP | \CitOmni\Cli\Boot\Registry::CFG_CLI
-	 *   2) Providers (listed in /config/providers.php): merge CFG_HTTP|CFG_CLI constants
-	 *   3) App base cfg: /config/citomni_{http|cli}_cfg.php
-	 *   4) App env overlay: /config/citomni_{http|cli}_cfg.{ENV}.php  ← last wins
+	 *   2) Providers (listed in /config/providers.php), per provider in order:
+	 *      a) CFG_COMMON  (shared HTTP+CLI defaults) [optional]
+	 *      b) CFG_HTTP | CFG_CLI  (mode-specific, overrides CFG_COMMON) [optional]
+	 *   3) App common base:  /config/citomni_cfg.php            [optional]
+	 *   4) App mode base:    /config/citomni_{http|cli}_cfg.php [optional]
+	 *   5) App common env:   /config/citomni_cfg.{ENV}.php            [optional]
+	 *   6) App mode env:     /config/citomni_{http|cli}_cfg.{ENV}.php [optional]  ← last wins
 	 *
 	 * Behavior:
 	 * - Pure read path: includes local config files and merges them; no cache writes, no side effects.
@@ -388,31 +397,47 @@ final class App {
 		// they have always been plain arrays by convention.
 		$providers = $this->loadProviders();
 
-		$constName = ($mode === Mode::HTTP) ? 'CFG_HTTP' : 'CFG_CLI';
+		// Per provider, in listed order: common overlay first, then the
+		// mode-specific overlay (mode wins within a provider; later providers
+		// win over earlier ones). CFG_COMMON lets a provider express shared
+		// HTTP+CLI defaults once instead of duplicating CFG_HTTP into CFG_CLI.
+		$modeConst = ($mode === Mode::HTTP) ? 'CFG_HTTP' : 'CFG_CLI';
 		foreach ($providers as $fqcn) {
-			$constFq = $fqcn . '::' . $constName;
-			if (\defined($constFq)) {
-				$pv  = \constant($constFq);
-				$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($pv));
+			foreach (['CFG_COMMON', $modeConst] as $constName) {
+				$constFq = $fqcn . '::' . $constName;
+				if (\defined($constFq)) {
+					$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig(\constant($constFq)));
+				}
 			}
 		}
 
-		// -- 3. App base cfg (I/O: 1 include) ----------------------------
-		$appBaseFile = $this->configDir . ($mode === Mode::HTTP ? '/citomni_http_cfg.php' : '/citomni_cli_cfg.php');
-		if (\is_file($appBaseFile)) {
-			$appCfg = require $appBaseFile;
-			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($appCfg));
+		// -- 3. App base cfg: common first, then mode-specific (I/O) ------
+		// Both files are optional. A minimal app may ship only citomni_cfg.php;
+		// the mode-specific file overrides the common one when present.
+		$appCommonBase = $this->configDir . '/citomni_cfg.php';
+		if (\is_file($appCommonBase)) {
+			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig(require $appCommonBase));
 		}
 
-		// -- 4. App env overlay (I/O: 1 include) -------------------------
+		$appModeBase = $this->configDir . ($mode === Mode::HTTP ? '/citomni_http_cfg.php' : '/citomni_cli_cfg.php');
+		if (\is_file($appModeBase)) {
+			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig(require $appModeBase));
+		}
+
+		// -- 4. App env overlay: common first, then mode-specific (I/O) ---
 		$useEnv = $env ?? (\defined('CITOMNI_ENVIRONMENT') ? (string)\CITOMNI_ENVIRONMENT : 'prod');
-		$appEnvFile = $this->configDir . ($mode === Mode::HTTP
+
+		$appCommonEnv = $this->configDir . "/citomni_cfg.{$useEnv}.php";
+		if (\is_file($appCommonEnv)) {
+			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig(require $appCommonEnv));
+		}
+
+		$appModeEnv = $this->configDir . ($mode === Mode::HTTP
 			? "/citomni_http_cfg.{$useEnv}.php"
 			: "/citomni_cli_cfg.{$useEnv}.php"
 		);
-		if (\is_file($appEnvFile)) {
-			$envCfg = require $appEnvFile;
-			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig($envCfg));
+		if (\is_file($appModeEnv)) {
+			$cfg = Arr::mergeAssocLastWins($cfg, Arr::normalizeConfig(require $appModeEnv));
 		}
 
 		return $cfg;
@@ -573,14 +598,21 @@ final class App {
 	 * 1. **Mode baseline** - static vendor defaults from
 	 *    \CitOmni\Http\Boot\Registry::MAP_HTTP or
 	 *    \CitOmni\Cli\Boot\Registry::MAP_CLI depending on runtime mode.
-	 * 2. **Providers** - external providers listed in /config/providers.php.
-	 *    Each provider class may define a MAP_HTTP or MAP_CLI constant.
-	 *    If present, those entries override vendor baseline for same IDs.
-	 * 3. **App overrides** - application-specific service definitions
-	 *    from /config/services.php. These always win.
+	 * 2. **Providers** - external providers listed in /config/providers.php, in
+	 *    listed order. Each provider may define MAP_COMMON (shared HTTP+CLI) and
+	 *    MAP_HTTP|MAP_CLI (mode-specific). Within a provider the mode-specific map
+	 *    wins over MAP_COMMON; later providers win over earlier ones; all win over
+	 *    the vendor baseline for same IDs.
+	 * 3. **App overrides** - /config/services.php (common) and the optional
+	 *    /config/services_{http|cli}.php (mode-specific). The mode-specific file
+	 *    wins over services.php; both always win.
 	 *
-	 * Merge order via array union (left side wins on key collision):
-	 *    app + provider + vendor
+	 * Effective precedence (highest first):
+	 *    app services_{mode}.php
+	 *      > app services.php
+	 *      > provider #N MAP_{mode} > provider #N MAP_COMMON
+	 *      > ... > provider #1 MAP_{mode} > provider #1 MAP_COMMON
+	 *      > vendor MAP_{mode}
 	 *
 	 * Notes:
 	 * - The services map has no env overlay. Service wiring is identical across environments.
@@ -601,29 +633,48 @@ final class App {
 			throw new \RuntimeException('Vendor Registry::MAP_{HTTP|CLI} must be an array.');
 		}
 
-		// 2) Provider overlays (union: provider wins over vendor)
+		// 2) Provider overlays (union: provider wins over vendor).
+		//    Per provider, in listed order: common first, then mode-specific.
+		//    Union is left-wins, so mode-specific overrides common within a
+		//    provider, and later providers override earlier ones. MAP_COMMON
+		//    lets a provider register shared HTTP+CLI services once instead of
+		//    duplicating MAP_HTTP into MAP_CLI.
 		$providers = $this->loadProviders();
-		$const = ($mode === Mode::HTTP) ? 'MAP_HTTP' : 'MAP_CLI';
+		$modeConst = ($mode === Mode::HTTP) ? 'MAP_HTTP' : 'MAP_CLI';
 
 		foreach ($providers as $fqcn) {
-			$constFq = $fqcn . '::' . $const;
-			if (\defined($constFq)) {
-				$pvmap = \constant($constFq);
-				if (!\is_array($pvmap)) {
-					throw new \RuntimeException("Provider {$fqcn}::{$const} must be an array.");
+			foreach (['MAP_COMMON', $modeConst] as $const) {
+				$constFq = $fqcn . '::' . $const;
+				if (\defined($constFq)) {
+					$pvmap = \constant($constFq);
+					if (!\is_array($pvmap)) {
+						throw new \RuntimeException("Provider {$fqcn}::{$const} must be an array.");
+					}
+					$map = $pvmap + $map;
 				}
-				$map = $pvmap + $map;
 			}
 		}
 
-		// 3) App overrides (union: app wins over everything)
-		$appMapFile = $this->configDir . '/services.php';
-		if (\is_file($appMapFile)) {
-			$appMap = require $appMapFile;
+		// 3) App overrides: common services.php first, then mode-specific
+		//    services_{http|cli}.php (mode-specific wins). Both win over
+		//    providers and vendor. services.php is part of the official
+		//    skeleton; the mode-specific file is optional.
+		$appCommonMapFile = $this->configDir . '/services.php';
+		if (\is_file($appCommonMapFile)) {
+			$appMap = require $appCommonMapFile;
 			if (!\is_array($appMap)) {
 				throw new \RuntimeException('services.php must return an array.');
 			}
 			$map = $appMap + $map;
+		}
+
+		$appModeMapFile = $this->configDir . ($mode === Mode::HTTP ? '/services_http.php' : '/services_cli.php');
+		if (\is_file($appModeMapFile)) {
+			$appModeMap = require $appModeMapFile;
+			if (!\is_array($appModeMap)) {
+				throw new \RuntimeException(\basename($appModeMapFile) . ' must return an array.');
+			}
+			$map = $appModeMap + $map;
 		}
 
 		return $map;
