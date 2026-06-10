@@ -1,0 +1,117 @@
+<?php
+declare(strict_types=1);
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (C) 2012-present Lars Grove Mortensen
+ *
+ * CitOmni Kernel - Common app configuration scaffold.
+ * Source:  https://github.com/citomni/kernel
+ * License: See the LICENSE file for full terms.
+ */
+
+/*
+ * ------------------------------------------------------------------
+ * COMMON APPLICATION CONFIGURATION
+ * ------------------------------------------------------------------
+ * This file defines app-wide settings shared by HTTP and CLI runtimes.
+ *
+ * POLICY:
+ *   - Keep this file minimal and ONLY declare keys that are genuinely shared
+ *     across runtime modes.
+ *   - Put HTTP-specific settings in /config/citomni_http_cfg.php.
+ *   - Put CLI-specific settings in /config/citomni_cli_cfg.php.
+ *   - Do not mirror vendor/provider baseline config here.
+ *
+ * MERGE MODEL (cfg, last wins):
+ *   1) Vendor mode baseline:       CFG_HTTP or CFG_CLI from the active runtime package
+ *   2) Provider common cfg:        CFG_COMMON from registries listed in /config/providers.php
+ *   3) Provider mode cfg:          CFG_HTTP or CFG_CLI from registries listed in /config/providers.php
+ *   4) App common base:            /config/citomni_cfg.php        (this file)
+ *   5) App mode base:              /config/citomni_http_cfg.php or /config/citomni_cli_cfg.php
+ *   6) App common env overlay:     /config/citomni_cfg.{ENV}.php
+ *   7) App mode env overlay:       /config/citomni_http_cfg.{ENV}.php or /config/citomni_cli_cfg.{ENV}.php
+ *
+ *   {ENV} comes from CITOMNI_ENVIRONMENT ('dev' | 'stage' | 'prod').
+ *
+ * MERGE RULES:
+ *   - Associative arrays merge recursively; per-key, the last source wins.
+ *   - Numeric arrays (lists) are replaced wholesale by the last source.
+ *   - Empty values ('', 0, false, null, []) are still valid overrides and they win.
+ *
+ * ACCESS IN CODE:
+ *   - $this->app->cfg->identity->app_name
+ *   - $this->app->cfg->identity->owner_name
+ *   - $this->app->cfg->locale->timezone
+ *
+ * NOTES:
+ *   - This file is app-owned after installation.
+ *   - Missing config files are ignored by runtime for backwards compatibility.
+ *   - Existing config files must return values accepted by Arr::normalizeConfig().
+ *   - Official scaffolded config files return arrays.
+ * ------------------------------------------------------------------
+ */
+return [
+
+
+	/*
+	 *------------------------------------------------------------------
+	 * APPLICATION IDENTITY
+	 *------------------------------------------------------------------
+	 * Shared human/legal app identity used by both HTTP and CLI contexts.
+	 */
+	'identity' => [
+
+		// Human-readable application name.
+		// - Shown in HTML titles, error pages, CLI output, or fallback legal pages.
+		// - Keep it short and brand-like, e.g. "My CitOmni App".
+		'app_name' => '%APP_NAME%',
+
+		// Legal owner of the application and its content.
+		// - Use the full legal entity name (company, org, or person).
+		// - Displayed on legal pages and may be used in generated notices.
+		'owner_name' => '%LEGAL_OWNER_NAME%',
+
+		// Contact address for legal/permissions requests.
+		// - Typically a compliance, legal, or admin mailbox.
+		'owner_email' => '%LEGAL_OWNER_EMAIL%',
+
+		// Public homepage of the legal owner.
+		// - Used for attribution links in license/terms pages.
+		// - Should be a stable corporate URL, not a product subpage.
+		'owner_url' => '%LEGAL_OWNER_URL%',
+
+		// Public-facing support contact.
+		// - This is what end-users see on contact pages, footers, or support output.
+		'contact_email' => '%OWNER_CONTACT_EMAIL%',
+
+		// Public phone number for end-user support.
+		// - Only include if you actually staff the line.
+		// - Format: international + local, human-readable.
+		'contact_phone' => '%OWNER_CONTACT_PHONE%',
+	],
+
+
+	/*
+	 *------------------------------------------------------------------
+	 * LOCALE
+	 *------------------------------------------------------------------
+	 * Language and formatting settings shared by this app.
+	 *
+	 * POLICY:
+	 * - Keep 'language' for HTML and i18n signals.
+	 * - Use 'icu_locale' for Intl/ICU date and number formatting.
+	 * - 'timezone' is the application default for time operations and formatting.
+	 * - 'charset' is applied by the runtime where relevant.
+	 *
+	 * REQUIREMENTS:
+	 * - PHP ext-intl must be installed for ICU-based formatting.
+	 */
+	'locale' => [
+		'language'   => 'da',
+		'icu_locale' => 'da_DK',
+		'timezone'   => 'Europe/Copenhagen',
+		'charset'    => 'UTF-8',
+	],
+
+
+];

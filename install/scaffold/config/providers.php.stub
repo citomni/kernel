@@ -1,0 +1,102 @@
+<?php
+declare(strict_types=1);
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (C) 2012-present Lars Grove Mortensen
+ *
+ * CitOmni Kernel - Provider registry whitelist scaffold.
+ * Source:  https://github.com/citomni/kernel
+ * License: See the LICENSE file for full terms.
+ */
+
+/**
+ * PROVIDER REGISTRY WHITELIST
+ * ------------------------------------------------------------------
+ * Ordered list of provider registry classes to activate for this app.
+ *
+ * A provider in CitOmni is typically a package Boot\Registry class that may
+ * contribute config, service maps, and dispatch maps for the active runtime mode.
+ *
+ * What a provider may contribute:
+ *   - Common config overlays via: CFG_COMMON
+ *   - Mode config overlays via:   CFG_HTTP / CFG_CLI
+ *   - Common service maps via:    MAP_COMMON
+ *   - Mode service maps via:      MAP_HTTP / MAP_CLI
+ *   - HTTP route maps via:        ROUTES_HTTP
+ *   - CLI command maps via:       COMMANDS_CLI
+ *
+ * There is no ROUTES_COMMON or COMMANDS_COMMON. Dispatch remains mode-specific.
+ *
+ * Config merge model (last wins):
+ *   1) Vendor mode baseline: CFG_HTTP or CFG_CLI from the active runtime package
+ *   2) Provider #1 CFG_COMMON, then provider #1 CFG_HTTP or CFG_CLI
+ *   3) Provider #2 CFG_COMMON, then provider #2 CFG_HTTP or CFG_CLI
+ *   4) App common base: /config/citomni_cfg.php
+ *   5) App mode base: /config/citomni_http_cfg.php or /config/citomni_cli_cfg.php
+ *   6) App common env overlay: /config/citomni_cfg.{ENV}.php
+ *   7) App mode env overlay: /config/citomni_http_cfg.{ENV}.php or /config/citomni_cli_cfg.{ENV}.php
+ *
+ * Service precedence model (left wins via PHP array union +):
+ *   - App mode services win over app common services.
+ *   - App common services win over provider services.
+ *   - Later providers win over earlier providers when service ids collide.
+ *   - Within one provider, MAP_HTTP/MAP_CLI wins over MAP_COMMON for the active mode.
+ *   - Vendor mode baseline has the lowest precedence.
+ *
+ * Dispatch merge model (last wins):
+ *   - HTTP routes: vendor ROUTES_HTTP -> provider ROUTES_HTTP -> app routes -> app env routes.
+ *   - CLI commands: vendor COMMANDS_CLI -> provider COMMANDS_CLI -> app commands -> app env commands.
+ *
+ * Requirements:
+ *   - Only plain FQCN strings belong here.
+ *   - No arrays, no closures, no logic, no side effects.
+ *   - Provider classes must be autoloadable through Composer.
+ *   - Missing or invalid provider classes fail fast by design.
+ *
+ * Policy:
+ *   - Keep this file intentional and ordered.
+ *   - Only list provider registry classes you actually want active in this app.
+ *   - Do not put app config, service definitions, routes, or commands here.
+ *   - Prefer a short, explicit list over speculative enablement.
+ *
+ * Notes:
+ *   - This file is app-owned after installation.
+ *   - Provider order matters.
+ *   - Shared package defaults belong in provider CFG_COMMON/MAP_COMMON.
+ *   - The vendor baseline is supplied by the selected runtime package: citomni/http or citomni/cli.
+ */
+return [
+
+	/*
+	|--------------------------------------------------------------------------
+	| Example: Infrastructure package
+	|--------------------------------------------------------------------------
+	| Common low-level services such as db, log, mail, txt, and related cfg.
+	*/
+	// \CitOmni\Infrastructure\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
+	| Example: Authentication package
+	|--------------------------------------------------------------------------
+	| Login, register, member area, and related auth wiring for apps that use it.
+	*/
+	// \CitOmni\Authenticate\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
+	| Example: Admin package
+	|--------------------------------------------------------------------------
+	| Admin routes, dashboards, and related backend wiring for apps that use it.
+	*/
+	// \CitOmni\Admin\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
+	| Example: App provider
+	|--------------------------------------------------------------------------
+	| App-specific config, services, routes, and commands collected in your own registry.
+	*/
+	// \App\Boot\Registry::class,
+
+];
