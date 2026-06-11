@@ -64,30 +64,30 @@ return [
 		// Human-readable application name.
 		// - Shown in HTML titles, error pages, CLI output, or fallback legal pages.
 		// - Keep it short and brand-like, e.g. "My CitOmni App".
-		'app_name' => '%APP_NAME%',
+		'app_name' => '{{APP_NAME}}',
 
 		// Legal owner of the application and its content.
 		// - Use the full legal entity name (company, org, or person).
 		// - Displayed on legal pages and may be used in generated notices.
-		'owner_name' => '%LEGAL_OWNER_NAME%',
+		'owner_name' => '{{LEGAL_OWNER_NAME}}',
 
 		// Contact address for legal/permissions requests.
 		// - Typically a compliance, legal, or admin mailbox.
-		'owner_email' => '%LEGAL_OWNER_EMAIL%',
+		'owner_email' => '{{LEGAL_OWNER_EMAIL}}',
 
 		// Public homepage of the legal owner.
 		// - Used for attribution links in license/terms pages.
 		// - Should be a stable corporate URL, not a product subpage.
-		'owner_url' => '%LEGAL_OWNER_URL%',
+		'owner_url' => '{{LEGAL_OWNER_URL}}',
 
 		// Public-facing support contact.
 		// - This is what end-users see on contact pages, footers, or support output.
-		'contact_email' => '%OWNER_CONTACT_EMAIL%',
+		'contact_email' => '{{OWNER_CONTACT_EMAIL}}',
 
 		// Public phone number for end-user support.
 		// - Only include if you actually staff the line.
 		// - Format: international + local, human-readable.
-		'contact_phone' => '%OWNER_CONTACT_PHONE%',
+		'contact_phone' => '{{OWNER_CONTACT_PHONE}}',
 	],
 
 
@@ -107,10 +107,10 @@ return [
 	 * - PHP ext-intl must be installed for ICU-based formatting.
 	 */
 	'locale' => [
-		'language'   => 'da',
-		'icu_locale' => 'da_DK',
-		'timezone'   => 'Europe/Copenhagen',
-		'charset'    => 'UTF-8',
+		'language'   => '{{LANGUAGE}}', // da
+		'icu_locale' => '{{ICU_LOCALE}}', // da_DK
+		'timezone'   => '{{TIMEZONE}}', // Europe/Copenhagen
+		'charset'    => '{{CHARSET}}', // UTF-8
 	],
 
 
