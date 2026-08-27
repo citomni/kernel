@@ -135,7 +135,7 @@ final class AppInfo {
 	 *
 	 * Returns one associative array with these top-level keys:
 	 * - citomni:    ['environment' => string|null] - CITOMNI_ENVIRONMENT, or null when undefined.
-	 * - app:        ['name','version','channel']   - identity from cfg.identity (null when absent).
+	 * - app:        ['name']                       - app identity from cfg.identity.app_name.
 	 * - runtime:    Effective PHP process values (hostname, datetime_local, datetime_utc,
 	 *               php_version, timezone, default_charset, icu_locale). Read from the process,
 	 *               not from cfg. datetime_local and datetime_utc share one observation instant.
@@ -184,9 +184,7 @@ final class AppInfo {
 				'environment' => \defined('CITOMNI_ENVIRONMENT') ? (string)\CITOMNI_ENVIRONMENT : null,
 			],
 			'app' => [
-				'name'    => $this->app->cfg->identity->name ?? null,
-				'version' => $this->app->cfg->identity->version ?? null,
-				'channel' => $this->app->cfg->identity->channel ?? null,
+				'name' => $this->app->cfg->identity->app_name ?? null,
 			],
 			'runtime'  => $this->collectRuntime(),
 			'metrics'  => $this->collectMetrics(),
