@@ -40,7 +40,10 @@ declare(strict_types=1);
  *
  * ACCESS IN CODE:
  *   - $this->app->cfg->identity->app_name
- *   - $this->app->cfg->identity->owner_name
+ *   - $this->app->cfg->identity->operator->name
+ *   - $this->app->cfg->identity->public_contact->email
+ *   - $this->app->cfg->identity->technical_support->email
+ *   - $this->app->cfg->identity->developer->name
  *   - $this->app->cfg->locale->timezone
  *
  * NOTES:
@@ -57,37 +60,67 @@ return [
 	 *------------------------------------------------------------------
 	 * APPLICATION IDENTITY
 	 *------------------------------------------------------------------
-	 * Shared human/legal app identity used by both HTTP and CLI contexts.
+	 * Shared app identity and role-based contact information available
+	 * to both HTTP and CLI contexts.
+	 *
+	 * ROLES:
+	 * - operator: The person or legal entity responsible for operating the app.
+	 * - public_contact: The contact identity intended for users or the public.
+	 * - technical_support: The primary contact for technical support of the app.
+	 * - developer: The primary person or organization developing the app.
+	 *
+	 * NOTES:
+	 * - Roles may refer to the same person or organization.
+	 * - Role-specific contact details should describe that role, not be copied
+	 *   merely to keep the structures symmetrical.
+	 * - URLs below identify the relevant person, organization, or contact point;
+	 *   they are not the app's runtime or public root URL.
 	 */
 	'identity' => [
 
 		// Human-readable application name.
-		// - Shown in HTML titles, error pages, CLI output, or fallback legal pages.
-		// - Keep it short and brand-like, e.g. "My CitOmni App".
+		// - Used wherever the app needs to identify itself by name.
+		// - Keep it short and recognizable, e.g. "Webshop.dk" or "Import Worker".
 		'app_name' => '{{APP_NAME}}',
 
-		// Legal owner of the application and its content.
-		// - Use the full legal entity name (company, org, or person).
-		// - Displayed on legal pages and may be used in generated notices.
-		'owner_name' => '{{LEGAL_OWNER_NAME}}',
+		// Person or legal entity responsible for operating the application.
+		// - This identifies who stands behind the deployed app, not who owns its code.
+		// - For an organization-operated app, use the full legal entity name.
+		'operator' => [
+			'name'  => '{{OPERATOR_NAME}}',
+			'email' => '{{OPERATOR_EMAIL}}',
+			'url'   => '{{OPERATOR_URL}}',
+		],
 
-		// Contact address for legal/permissions requests.
-		// - Typically a compliance, legal, or admin mailbox.
-		'owner_email' => '{{LEGAL_OWNER_EMAIL}}',
+		// Public contact identity presented to users or the general public.
+		// - Use the name or brand users should recognize as their contact point.
+		// - Suitable for contact pages, messages, footers, or provider packages.
+		'public_contact' => [
+			'name'  => '{{PUBLIC_CONTACT_NAME}}',
+			'email' => '{{PUBLIC_CONTACT_EMAIL}}',
+			'phone' => '{{PUBLIC_CONTACT_PHONE}}',
+			'url'   => '{{PUBLIC_CONTACT_URL}}',
+		],
 
-		// Public homepage of the legal owner.
-		// - Used for attribution links in license/terms pages.
-		// - Should be a stable corporate URL, not a product subpage.
-		'owner_url' => '{{LEGAL_OWNER_URL}}',
+		// Primary technical support contact for this application.
+		// - Represents the first technical contact point, such as an internal IT
+		//   department, service desk, hosting team, or external provider.
+		// - It may differ from the developer when support is handled in tiers.
+		'technical_support' => [
+			'name'  => '{{TECHNICAL_SUPPORT_NAME}}',
+			'email' => '{{TECHNICAL_SUPPORT_EMAIL}}',
+			'phone' => '{{TECHNICAL_SUPPORT_PHONE}}',
+			'url'   => '{{TECHNICAL_SUPPORT_URL}}',
+		],
 
-		// Public-facing support contact.
-		// - This is what end-users see on contact pages, footers, or support output.
-		'contact_email' => '{{OWNER_CONTACT_EMAIL}}',
-
-		// Public phone number for end-user support.
-		// - Only include if you actually staff the line.
-		// - Format: international + local, human-readable.
-		'contact_phone' => '{{OWNER_CONTACT_PHONE}}',
+		// Primary person or organization responsible for developing the application.
+		// - Identifies software authorship/maintenance, not legal ownership of the app.
+		// - May also be used when generating package or project metadata.
+		'developer' => [
+			'name'  => '{{DEVELOPER_NAME}}',
+			'email' => '{{DEVELOPER_EMAIL}}',
+			'url'   => '{{DEVELOPER_URL}}',
+		],
 	],
 
 
