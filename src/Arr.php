@@ -26,8 +26,14 @@ namespace CitOmni\Kernel;
  *   3) Integer-key collisions are overwritten by the right-hand side.
  * - Deep normalization of config structures.
  *   1) Top-level input MUST be array|object|Traversable (else RuntimeException).
- *   2) Nested arrays/objects/Traversables are converted to arrays recursively.
- *   3) Scalars/resources are preserved as-is.
+ *      An enum case is rejected as top-level input: the root must be a map.
+ *   2) Nested values are checked in a fixed order, first match wins:
+ *      array (recurse) -> enum case (keep) -> Traversable (iterator_to_array())
+ *      -> other object (get_object_vars()) -> anything else (keep).
+ *   3) Enum cases are leaf values and survive as the same instance, also when the
+ *      enum implements IteratorAggregate. They are never flattened into
+ *      ['name' => ..., 'value' => ...].
+ *   4) Scalars/resources are preserved as-is.
  * - Lightweight predicates.
  *   1) isList(): detects sequential integer-keyed arrays starting at 0.
  *
@@ -39,7 +45,8 @@ namespace CitOmni\Kernel;
  * - N/A (general-purpose array helpers; do not consume cfg directly).
  *
  * Error handling:
- * - normalizeConfig(): throws \RuntimeException if the top-level value is not array|object|Traversable.
+ * - normalizeConfig(): throws \RuntimeException if the top-level value is not array|object|Traversable,
+ *   or is an enum case.
  * - mergeAssocLastWins(): no exceptions; produces a deterministic merged array.
  *
  * Typical usage:
@@ -166,20 +173,26 @@ final class Arr {
 	 * - Traversable: Converted via iterator_to_array(), then normalized recursively.
 	 *
 	 * Rules:
-	 * - Nested arrays, objects, or Traversables are expanded into arrays all the way down.
+	 * - Nested arrays, objects (except enum cases), or Traversables are expanded into arrays
+	 *   all the way down.
+	 * - Nested enum cases (\UnitEnum) are NOT expanded. They are leaf values and are
+	 *   returned as the same instance, also when the enum implements IteratorAggregate.
 	 * - Scalars (string, int, bool, float, null) are preserved as-is.
 	 * - Empty arrays and objects normalize to empty arrays.
 	 * - Top-level input MUST be array, object, or Traversable - otherwise RuntimeException.
-	 * - Nested values (incl. scalars/resources) are preserved as-is unless they are arrays,
-	 *   objects, or Traversables (which are normalized recursively).
+	 * - A top-level enum case throws RuntimeException. It is an object (and possibly
+	 *   Traversable), but the root must be a map; checked before Traversable and object.
+	 * - Nested values follow the check order of convertValueDeep(): array, enum case,
+	 *   Traversable, other object, anything else (incl. scalars/resources, kept as-is).
 	 *
 	 * Purpose:
 	 * - Guarantees that config structures containing stdClass instances or
-	 *   other iterable objects become fully usable associative arrays.
+	 *   other iterable objects become fully usable associative arrays, while enum
+	 *   values (e.g. 'fit' => Fit::Cover) keep their type through normalization.
 	 *
-	 * @param mixed $x Input configuration value (expected array, object, or Traversable).
+	 * @param mixed $x Input configuration value (expected array, object, or Traversable; not an enum case).
 	 * @return array<string,mixed> Fully normalized configuration array.
-	 * @throws \RuntimeException If input is not array, object, or Traversable.
+	 * @throws \RuntimeException If input is not array, object, or Traversable, or is an enum case.
 	 */
 	public static function normalizeConfig(mixed $x): array {
 		if (\is_array($x)) {
@@ -188,6 +201,10 @@ final class Arr {
 				$out[$k] = self::convertValueDeep($v);
 			}
 			return $out;
+		}
+		// Must precede Traversable/object: an enum case is one value, never a map.
+		if ($x instanceof \UnitEnum) {
+			throw new \RuntimeException('Config root must be a map, not an enum case (' . $x::class . '::' . $x->name . ').');
 		}
 		if ($x instanceof \Traversable) {
 			return self::normalizeConfig(\iterator_to_array($x));
@@ -202,8 +219,13 @@ final class Arr {
 	/**
 	 * Recursively convert a single value into arrays where applicable.
 	 *
-	 * Behavior:
+	 * Behavior (checked in this order; the first match wins):
 	 * - Arrays: each element is processed recursively.
+	 * - Enum cases (\UnitEnum): returned as-is (same instance).
+	 *   1) Checked before Traversable, because an enum may implement IteratorAggregate
+	 *      and must not be iterated.
+	 *   2) Checked before generic objects, because get_object_vars() would flatten a
+	 *      case into ['name' => ...] or ['name' => ..., 'value' => ...].
 	 * - Traversable: converted via iterator_to_array(), then processed recursively.
 	 * - Objects: converted via get_object_vars(), then processed recursively.
 	 * - Everything else (incl. scalars/resources): returned as-is.
@@ -211,9 +233,11 @@ final class Arr {
 	 * Notes:
 	 * - This method does NOT throw; type validation is handled by normalizeConfig()
 	 *   for the top-level input.
+	 * - var_export() writes enum cases as class-constant references, so compiled caches
+	 *   restore the same instances on include (see App, CACHING).
 	 *
 	 * @param mixed $v Any value.
-	 * @return mixed Array/normalized value or the original value when not convertible.
+	 * @return mixed Array/normalized value or the original value when not convertible (incl. enum cases).
 	 */
 	private static function convertValueDeep(mixed $v): mixed {
 		if (\is_array($v)) {
@@ -222,6 +246,10 @@ final class Arr {
 				$out[$kk] = self::convertValueDeep($vv);
 			}
 			return $out;
+		}
+		// Leaf value. Must precede Traversable: enums may implement IteratorAggregate.
+		if ($v instanceof \UnitEnum) {
+			return $v;
 		}
 		if ($v instanceof \Traversable) {
 			return self::normalizeConfig(\iterator_to_array($v));

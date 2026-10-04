@@ -34,8 +34,11 @@
 			"CitOmni\\Kernel\\Tests\\": "tests/"
 		}
 	},
-	"require-dev": {
-		"phpunit/phpunit": "^11.0"
+	"scripts": {
+		"test": [
+			"@php tests/arr_test.php",
+			"@php tests/cfg_test.php"
+		]
 	},
 	"suggest": {
 		"ext-json": "Faster JSON handling",

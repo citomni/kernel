@@ -68,6 +68,14 @@ use CitOmni\Kernel\Arr;
  *   <appRoot>/var/cache/services.{http|cli}.php
  *
  *   Each cache file must be side-effect-free and return a plain array.
+ *   Values in that array are scalars, arrays, or enum cases. Arr::normalizeConfig()
+ *   preserves enum cases, and var_export() writes them as \Vendor\Enum::Case
+ *   references, so including a cache file restores the same instances.
+ *   Enum classes must therefore be autoloadable when a cache file is included.
+ *   Composer's autoloader is loaded before App, so this holds for installed packages.
+ *   A cache that references an enum class or case that no longer exists (e.g. from a
+ *   removed package) fails on include; it is not treated as a cache-miss. Rerun
+ *   warmCache() after dependency changes.
  *   The constructor will consume these if present; otherwise it rebuilds.
  *   Non-array returns from cache files are treated as cache-miss (fallback to build).
  *

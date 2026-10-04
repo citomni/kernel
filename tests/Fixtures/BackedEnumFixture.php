@@ -13,12 +13,15 @@ declare(strict_types=1);
  * please see the LICENSE file distributed with this source code.
  */
 
-namespace CitOmni\Kernel\Tests\Command;
+namespace CitOmni\Kernel\Tests\Fixtures;
 
-use PHPUnit\Framework\TestCase;
-
-class BaseCommandTest extends TestCase {
-	public function testClassExists(): void {
-		self::assertTrue(\class_exists(\CitOmni\Kernel\Command\BaseCommand::class));
-	}
+/**
+ * Backed enum used as a cfg value in regression scripts.
+ *
+ * Before the fix, get_object_vars() flattened a case of this enum into
+ * ['name' => ..., 'value' => ...].
+ */
+enum BackedEnumFixture: string {
+	case Webp = 'webp';
+	case Avif = 'avif';
 }

@@ -199,7 +199,9 @@ Accepted inputs:
 * object
 * `Traversable`
 
-Anything else throws `RuntimeException`.
+Anything else throws `RuntimeException`. An enum case is rejected as the root as well, because the root must be a map.
+
+Nested arrays, objects, and `Traversable`s are converted to arrays recursively. Enum cases are the exception: they are preserved as-is (same instance), also when the enum implements `IteratorAggregate`. A cfg value such as `'fit' => Fit::Cover` therefore reaches `$app->cfg` as the enum case, not as `['name' => 'Cover', ...]`.
 
 ## `Cfg`
 
