@@ -249,6 +249,7 @@ final class App {
 
 	public function buildConfig(?string $env = null): array;
 	public function warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array;
+	public function clearCache(bool $opcacheInvalidate = true): array;
 
 	public function hasService(string $id): bool;
 	public function hasAnyService(string ...$ids): bool;
@@ -284,7 +285,7 @@ If the config directory cannot be resolved, construction fails fast.
 If compiled cache files exist, the constructor prefers them:
 
 * `<appRoot>/var/cache/cfg.{http|cli}.php`
-* `<appRoot>/var/cache/routes.{http|cli}.php`
+* `<appRoot>/var/cache/routes.http.php` (HTTP) or `<appRoot>/var/cache/commands.cli.php` (CLI)
 * `<appRoot>/var/cache/services.{http|cli}.php`
 
 If a cache file is missing or invalid, the kernel falls back to the normal build pipeline.
@@ -554,7 +555,7 @@ So while provider packages are documented via `src/Boot/Registry.php`, the curre
 
 ## Caches
 
-The kernel can use compiled cache artifacts for configuration, routes, and services.
+The kernel can use compiled cache artifacts for configuration, dispatch maps (routes in HTTP mode, commands in CLI mode), and services.
 
 Cache targets:
 
@@ -562,8 +563,10 @@ Cache targets:
 * `var/cache/routes.http.php`
 * `var/cache/services.http.php`
 * `var/cache/cfg.cli.php`
-* `var/cache/routes.cli.php`
+* `var/cache/commands.cli.php`
 * `var/cache/services.cli.php`
+
+An `App` reads, warms, and clears only the three files of its own mode.
 
 These caches are performance tools, not correctness mechanisms.
 
@@ -574,6 +577,8 @@ Expected properties:
 * deterministic content
 * safe to regenerate
 
+While a cache file exists, the constructor uses it instead of the sources it was built from. Changes to `/config`, `providers.php`, or provider `Registry` constants take effect only after the cache is warmed again or cleared.
+
 ### `warmCache()`
 
 `warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array` rebuilds config, dispatch, and services, then writes the three cache files atomically.
@@ -583,7 +588,7 @@ Returned shape:
 ```php
 [
 	'cfg' => '/absolute/path/to/cfg.http.php' | null,
-	'routes' => '/absolute/path/to/routes.http.php' | null,
+	'dispatch' => '/absolute/path/to/routes.http.php' | null, // commands.cli.php in CLI mode
 	'services' => '/absolute/path/to/services.http.php' | null,
 ]
 ```
@@ -601,6 +606,23 @@ $cli->warmCache(overwrite: true, opcacheInvalidate: true);
 ```
 
 Ensure the process can write to `<appRoot>/var/cache/`.
+
+### `clearCache()`
+
+`clearCache(bool $opcacheInvalidate = true): array` removes the three cache files of the App's mode. Later `App` instances for that mode rebuild from sources until `warmCache()` runs again; the calling instance keeps what it already loaded.
+
+The returned shape matches `warmCache()`: the removed path per entry, or `null` when that file was not present.
+
+```php
+$removed = $app->clearCache();
+```
+
+* With `opcacheInvalidate`, each file is invalidated in OPcache before it is unlinked, when `opcache_invalidate()` exists.
+* OPcache is per SAPI. Called from the CLI, the invalidation does not reach the web server's OPcache (PHP-FPM, mod_php).
+* A file that exists but cannot be removed throws `RuntimeException`. Files removed before the failure stay removed.
+* The process needs write permission on `<appRoot>/var/cache/`.
+
+`citomni/cli` exposes both methods as the `cache:warm` and `cache:clear` commands, including the HTTP caches.
 
 ## Dev helpers
 
@@ -806,7 +828,7 @@ Typical failure cases include:
 * malformed provider registration
 * invalid service definitions
 * unknown service ids
-* invalid cache writes
+* failed cache writes or removals
 * unknown config keys
 
 The kernel should not silently recover from structural mistakes that deserve to be fixed.

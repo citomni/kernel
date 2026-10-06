@@ -49,13 +49,11 @@ use CitOmni\Kernel\App;
  *           // Keep setup lightweight and deterministic.
  *       }
  *
- *       public function run(array $input): array {
- *           $this->app->log->write('info', 'auth', 'authentication_started', [
- *               'email' => $input['email'] ?? null,
- *           ]);
+ *       public function execute(string $email): array {
+ *           $this->app->log->write('auth.jsonl', 'authentication', 'Authentication started.');
  *
  *           $repository = new \App\Repository\UserRepository($this->app);
- *           $user = $repository->findByEmail((string)($input['email'] ?? ''));
+ *           $user = $repository->findByEmail($email);
  *
  *           return [
  *               'ok' => $user !== null,
@@ -65,7 +63,8 @@ use CitOmni\Kernel\App;
  *   }
  *
  * Notes:
- * - Operations are instantiated explicitly by Controllers/Commands via new ...($this->app).
+ * - Operations are instantiated explicitly by Controllers/Commands via new ...($this->app)
+ *   and called through execute(...), optionally preceded by a read-only preflight(...).
  * - Keep init() minimal; it runs eagerly on construction.
  * - Operation is intentionally not a service-map singleton.
  */

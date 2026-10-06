@@ -78,6 +78,12 @@ use CitOmni\Kernel\Arr;
  *   warmCache() after dependency changes.
  *   The constructor will consume these if present; otherwise it rebuilds.
  *   Non-array returns from cache files are treated as cache-miss (fallback to build).
+ * - warmCache() writes the three files of the App's own mode and clearCache()
+ *   removes them; neither touches the other mode's files. After clearCache(),
+ *   the next App for that mode rebuilds from sources until warmCache() runs again.
+ * - OPcache invalidation in warmCache() and clearCache() only reaches the OPcache
+ *   of the calling SAPI. A CLI process cannot invalidate the web server's OPcache
+ *   (PHP-FPM, mod_php).
  *
  * MODE CONTRACT
  * - Mode::HTTP requires citomni/http (specifically \CitOmni\Http\Boot\Registry).
@@ -104,6 +110,7 @@ use CitOmni\Kernel\Arr;
  *   - Non-array return types from cfg, dispatch, or services sources
  *   - Non-array provider MAP/dispatch constants
  *   - Cache write or move failures in warmCache()
+ *   - Cache files that exist but cannot be removed in clearCache()
  * - This class does not catch exceptions; errors bubble to the global handler.
  *
  * Typical usage:
@@ -145,6 +152,9 @@ use CitOmni\Kernel\Arr;
  *
  *   // Warm caches targeting prod (e.g. from a dev deploy script):
  *   $written = $app->warmCache(env: 'prod');
+ *
+ *   // Remove this mode's caches; the next App rebuilds from sources:
+ *   $removed = $app->clearCache();
  *
  * Failure modes:
  *
@@ -729,7 +739,7 @@ final class App {
 
 
 	// ----------------------------------------------------------------
-	// Cache loading and warming
+	// Cache loading, warming, and clearing
 	// ----------------------------------------------------------------
 
 	/**
@@ -873,6 +883,71 @@ final class App {
 		}
 
 		return $target;
+	}
+
+
+	/**
+	 * Remove the compiled caches for the current mode (HTTP or CLI).
+	 *
+	 * Removes the three cache artifacts that warmCache() writes under <appRoot>/var/cache:
+	 *   HTTP mode: cfg.http.php, routes.http.php, services.http.php
+	 *   CLI mode:  cfg.cli.php, commands.cli.php, services.cli.php
+	 *
+	 * Behavior:
+	 * - Resolves the paths via cacheFilePaths(), like the constructor and warmCache(),
+	 *   so only this App's mode is affected. The other mode's files are left alone.
+	 * - If $opcacheInvalidate=true and opcache_invalidate() exists, each existing file is
+	 *   invalidated before it is unlinked.
+	 * - A file that is not present is not an error; its entry is null.
+	 * - Fail-fast: a file that exists but cannot be removed throws. Files removed earlier
+	 *   in the same call stay removed.
+	 *
+	 * Notes:
+	 * - Affects later App constructions only. They rebuild from sources until warmCache()
+	 *   runs again; this instance keeps the cfg, dispatch map, and services it loaded.
+	 * - OPcache invalidation only reaches the OPcache of the calling SAPI. From the CLI it
+	 *   does not reach the web server's OPcache (PHP-FPM, mod_php).
+	 * - If unlink() fails because another process removed the file first, the entry is
+	 *   null rather than an error.
+	 * - Does not remove <appRoot>/var/cache itself or stray temp files from warmCache().
+	 * - No exceptions are caught here; failures bubble up.
+	 *
+	 * Typical usage:
+	 *   $removed = $app->clearCache();
+	 *   // ['cfg' => '/app/var/cache/cfg.cli.php', 'dispatch' => null, 'services' => '/app/var/cache/services.cli.php']
+	 *
+	 * @param  bool  $opcacheInvalidate  Invalidate OPcache for each file before removing it (when available).
+	 * @return array{cfg: ?string, dispatch: ?string, services: ?string}  Absolute paths removed (null = not present).
+	 * @throws \RuntimeException  If a cache file exists but cannot be removed.
+	 */
+	public function clearCache(bool $opcacheInvalidate = true): array {
+		$removed = [];
+
+		foreach ($this->cacheFilePaths() as $key => $path) {
+			if (!\is_file($path)) {
+				$removed[$key] = null;
+				continue;
+			}
+
+			if ($opcacheInvalidate && \function_exists('opcache_invalidate')) {
+				@\opcache_invalidate($path, true);
+			}
+
+			if (!@\unlink($path)) {
+				// Another process may have removed it first; only a file that
+				// is still there is a failure.
+				\clearstatcache(true, $path);
+				if (\is_file($path)) {
+					throw new \RuntimeException("Failed removing cache file: {$path}");
+				}
+				$removed[$key] = null;
+				continue;
+			}
+
+			$removed[$key] = $path;
+		}
+
+		return $removed;
 	}
 
 

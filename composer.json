@@ -37,7 +37,8 @@
 	"scripts": {
 		"test": [
 			"@php tests/arr_test.php",
-			"@php tests/cfg_test.php"
+			"@php tests/cfg_test.php",
+			"@php tests/app_cache_test.php"
 		]
 	},
 	"suggest": {
