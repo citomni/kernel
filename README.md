@@ -288,7 +288,7 @@ If compiled cache files exist, the constructor prefers them:
 * `<appRoot>/var/cache/routes.http.php` (HTTP) or `<appRoot>/var/cache/commands.cli.php` (CLI)
 * `<appRoot>/var/cache/services.{http|cli}.php`
 
-If a cache file is missing or invalid, the kernel falls back to the normal build pipeline.
+If a cache file is missing or does not return an array, the kernel falls back to the normal build pipeline. A cache file that returns an array is used without checking it against its sources; see [Caches](#caches).
 
 ### Service resolution
 
@@ -577,11 +577,17 @@ Expected properties:
 * deterministic content
 * safe to regenerate
 
-While a cache file exists, the constructor uses it instead of the sources it was built from. Changes to `/config`, `providers.php`, or provider `Registry` constants take effect only after the cache is warmed again or cleared.
+While a cache file exists, the constructor uses it instead of the sources it was built from, and nothing checks whether it is still current. Changes to `/config`, `providers.php`, or the `Registry` constants of the mode package or a provider (for example after `composer update`) take effect only after the cache is warmed again or cleared. The same holds for the environment: A cache warmed with `warmCache(env: 'prod')` is used as is by the same app running as `dev`.
+
+Only a missing file or a non-array return counts as a cache miss. Other failures do not fall back to a rebuild:
+
+* A syntax error in a cache file, for example from a truncated copy, throws `ParseError`.
+* A reference to an enum class or case that no longer exists throws `Error`.
+* With `opcache.validate_timestamps=0`, the web server's OPcache keeps serving the old compiled file until the file is invalidated or OPcache is reset from that SAPI.
 
 ### `warmCache()`
 
-`warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array` rebuilds config, dispatch, and services, then writes the three cache files atomically.
+`warmCache(bool $overwrite = true, bool $opcacheInvalidate = true, ?string $env = null): array` rebuilds config, dispatch, and services, then writes each of the three cache files atomically (temp file and rename). A build error leaves the existing files untouched. The three files are not replaced as a set: If a write fails, the files written before it stay in place.
 
 Returned shape:
 

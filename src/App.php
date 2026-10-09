@@ -74,10 +74,13 @@ use CitOmni\Kernel\Arr;
  *   Enum classes must therefore be autoloadable when a cache file is included.
  *   Composer's autoloader is loaded before App, so this holds for installed packages.
  *   A cache that references an enum class or case that no longer exists (e.g. from a
- *   removed package) fails on include; it is not treated as a cache-miss. Rerun
- *   warmCache() after dependency changes.
+ *   removed package) fails on include; it is not treated as a cache-miss.
  *   The constructor will consume these if present; otherwise it rebuilds.
  *   Non-array returns from cache files are treated as cache-miss (fallback to build).
+ * - Cache files are not checked against their sources. A cache built from older
+ *   sources (mode or provider Registry constants, providers.php, app config files)
+ *   or for another environment is used as is. Rerun warmCache() or clearCache()
+ *   after any of them change, e.g. as part of the deploy step. See loadCacheArray().
  * - warmCache() writes the three files of the App's own mode and clearCache()
  *   removes them; neither touches the other mode's files. After clearCache(),
  *   the next App for that mode rebuilds from sources until warmCache() runs again.
@@ -223,8 +226,9 @@ final class App {
 	 *
 	 * Initializes the application with a given configuration directory and mode (HTTP|CLI).
 	 * This constructor prefers precompiled cache artifacts (if present) to minimize
-	 * runtime overhead. If a cache file is missing or invalid, it falls back to the
-	 * normal build pipeline.
+	 * runtime overhead. If a cache file is missing or does not return an array, it
+	 * falls back to the normal build pipeline. A cache file that returns an array is
+	 * used without checking it against its sources (see loadCacheArray()).
 	 *
 	 * Behavior:
 	 * - Resolves mode-specific cache file paths via cacheFilePaths().
@@ -745,14 +749,29 @@ final class App {
 	/**
 	 * Attempt to load a cached array from a PHP file.
 	 *
-	 * Cache files must return a plain array. Any other return type is treated as
-	 * a cache-miss (returns null), triggering a rebuild from sources.
+	 * Returns null (cache-miss) when the file does not exist or does not return an
+	 * array; the caller then rebuilds from sources. Any array the file returns is
+	 * used as is.
 	 *
-	 * This is a deliberate kernel principle: corrupt or stale cache is a miss,
-	 * not a fatal error. Cache files are generated artifacts, not authored source.
-	 * If a deploy fails halfway, a file is truncated, or opcache serves stale
-	 * bytecode, the app rebuilds from sources and continues. Fail-fast applies
-	 * to sources (providers.php, cfg files, Registry constants) - not to cache.
+	 * Behavior:
+	 * - No staleness check: The cache is not compared with the sources it was built
+	 *   from (Registry constants, providers.php, app config files) or with the current
+	 *   environment. A cache built from older sources, or by warmCache(env: ...) for
+	 *   another environment, is returned like a current one.
+	 * - Include errors propagate: A syntax error, e.g. from a truncated file, throws
+	 *   \ParseError. A reference to an enum class or case that no longer exists throws
+	 *   \Error.
+	 * - OPcache can return the previously compiled version of a replaced file: With
+	 *   opcache.validate_timestamps=0 until the file is invalidated or OPcache is reset,
+	 *   otherwise for up to opcache.revalidate_freq seconds.
+	 *
+	 * Notes:
+	 * - Cache files are generated artifacts, and the kernel trusts them instead of
+	 *   spending filesystem I/O on validating them. Keeping them current is the deploy
+	 *   step's job: Rerun warmCache() or clearCache() after any source change, and
+	 *   reset OPcache in the web server's SAPI where validate_timestamps=0.
+	 * - The three cache files of a mode can come from different warmCache() runs
+	 *   (see warmCache()).
 	 *
 	 * @param  string  $file  Absolute path to the cache file.
 	 * @return ?array  The cached array, or null on miss (file absent or non-array return).
@@ -802,15 +821,23 @@ final class App {
 	 *   allowing deterministic cache generation for a target environment from any
 	 *   environment (e.g. warming prod caches from a dev deploy script).
 	 * - Each cache file is a tiny PHP script that does `return [ ... ];` with no side effects.
-	 * - Files are written atomically via a temp file + rename. If $overwrite=false and a file
+	 * - All three arrays are built before the first write, so a build error leaves the
+	 *   existing files untouched.
+	 * - Files are written atomically via a temp file + rename, one at a time, not as a set.
+	 *   If a write fails, the files written before it stay in place, and the remaining
+	 *   files keep their previous version or stay absent. If $overwrite=false and a file
 	 *   already exists, that file is skipped.
 	 * - If $opcacheInvalidate=true and opcache_invalidate() exists, we invalidate each file
-	 *   after replacing it to avoid stale bytecode in prod.
+	 *   after replacing it to avoid stale bytecode in prod. This only reaches the OPcache
+	 *   of the calling SAPI.
 	 *
 	 * Notes:
 	 * - The services map has no env overlay, so $env does not affect buildServices(). It is
 	 *   included in this method's signature for coherence: one call warms everything for one target.
-	 * - The App constructor will automatically consume these cache files if present.
+	 * - The App constructor will automatically consume these cache files if present,
+	 *   without checking them against their sources (see loadCacheArray()).
+	 * - The files land in this App's <appRoot>/var/cache whatever $env is. An App running
+	 *   in another environment from the same app root consumes them as is.
 	 * - Callers must ensure <appRoot>/var/cache is writable in the current environment.
 	 * - No exceptions are caught here; failures bubble up.
 	 *
