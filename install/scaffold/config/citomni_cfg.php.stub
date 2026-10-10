@@ -140,10 +140,10 @@ return [
 	 * - PHP ext-intl must be installed for ICU-based formatting.
 	 */
 	'locale' => [
-		'language'   => '{{LANGUAGE}}', // da
-		'icu_locale' => '{{ICU_LOCALE}}', // da_DK
-		'timezone'   => '{{TIMEZONE}}', // Europe/Copenhagen
-		'charset'    => '{{CHARSET}}', // UTF-8
+		'language'   => '{{LANGUAGE}}', // i.e. da
+		'icu_locale' => '{{ICU_LOCALE}}', // i.e. da_DK
+		'timezone'   => '{{TIMEZONE}}', // i.e. Europe/Copenhagen
+		'charset'    => '{{CHARSET}}', // i.e. UTF-8
 	],
 
 
