@@ -45,8 +45,7 @@
 		"citomni/http": "HTTP runtime: Kernel+router+request/response+error handler for web apps",
 		"citomni/cli": "CLI runtime: Kernel+command runner with the same deterministic boot",
 		"citomni/infrastructure": "Shared infra services (db, log, mail, txt) for HTTP & CLI",
-		"citomni/authenticate": "User accounts, login, registration, password lifecycle, MFA, trusted devices, and member profile flows.",
-		"citomni/testing": "Dev-only integration test harness; zero prod overhead"
+		"citomni/authenticate": "User accounts, login, registration, password lifecycle, MFA, trusted devices, and member profile flows."
 	},
 	"support": {
 		"issues": "https://github.com/citomni/kernel/issues",
