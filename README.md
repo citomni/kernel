@@ -240,27 +240,37 @@ Nested arrays, objects, and `Traversable`s are converted to arrays recursively. 
 Examples:
 
 ```php
-$app->cfg->http->base_url;
-$app->cfg->locale->timezone;
-$app->cfg->security->csrf_protection;
+$app->cfg->vendor_package->retry->max_attempts;
+$app->cfg['vendor_package']['retry']['max_attempts'];
 ```
 
 Behavior:
 
 * associative arrays are wrapped as nested `Cfg` nodes
 * numeric arrays remain plain arrays
-* unknown keys throw `OutOfBoundsException`
+* a direct read throws `OutOfBoundsException` at the first missing key, at any depth
 * writes/unsets throw `LogicException`
 * implements `ArrayAccess`, `IteratorAggregate`, and `Countable`
 * `toArray()` returns the underlying raw array
 
-Important access note:
+### Reading cfg
+
+`??` and `isset()` are existence guards. PHP calls `Cfg::__isset()` (or `offsetExists()` for array syntax) for every node on the path, so neither form throws on a missing key, at any depth. `??` also falls back when the value is `null`; `isset()` is true for a key whose value is `null`. The right operand of `??` is not guarded.
+
+Choose the form by who owns the path:
+
+* Own cfg, a path the package's Registry ships (`CFG_COMMON`, `CFG_HTTP`, `CFG_CLI`) or a key the app defines in its own config files: read it directly, with no `??`, `isset()`, `empty()` or `?->`. A guard duplicates the baseline's default and hides a missing baseline; fix the baseline instead.
+* An option over own cfg: `$this->options['key'] ?? $this->app->cfg->vendor_package->key`. Do not append another `?? <default>`.
+* App cfg read by a package, another package's cfg, or a path that exists in one mode only: `?? <default>`. Use `isset()` only to branch on whether a node exists.
+* A runtime-chosen key in an own map, such as a profile or storage name: `?? null`, then throw a specific exception.
 
 ```php
-$csrf = (bool)($this->app->cfg->security->csrf_protection ?? true);
-```
+// Own cfg: the package's Registry ships vendor_package.retry.max_attempts.
+$maxAttempts = (int)$this->app->cfg->vendor_package->retry->max_attempts;
 
-The null-coalescing operator is only safe for the **final** key in the chain. If intermediate nodes may not exist, guard them first with `isset()`.
+// Cfg owned by the app or another package.
+$timezone = (string)($this->app->cfg->locale->timezone ?? 'UTC');
+```
 
 ## `App`
 
@@ -797,7 +807,8 @@ if ($this->app->hasService('mailer')) {
 <?php
 declare(strict_types=1);
 
-$timezone = $this->app->cfg->locale->timezone ?? 'UTC';
+// locale.timezone is app cfg; a package reads it with a default.
+$timezone = (string)($this->app->cfg->locale->timezone ?? 'UTC');
 ```
 
 ## Example: route access

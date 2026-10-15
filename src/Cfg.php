@@ -30,23 +30,31 @@ namespace CitOmni\Kernel;
  *   clarity. (As of now RAW_ARRAY_SET is intentionally empty because routes have been
  *   moved out of cfg and onto $app->routes instead.)
  *
- * - Fails fast on unknown keys to surface config mistakes early.
+ * - Fails fast on a direct read of an unknown key, at any depth, to surface config
+ *   mistakes early.
+ * - isset() and ?? call __isset() / offsetExists() for every node on the path, so
+ *   neither throws on a missing key. ?? also falls back on null; isset() is true for
+ *   a key whose value is null. The right operand of ?? is not guarded.
  *
  * Relationship to App:
- * - \CitOmni\Kernel\App builds the final merged configuration using deterministic
- *   "last wins" rules (vendor -> providers -> /config/citomni_http_cfg.php -> env overlay).
- * - App then wraps that merged array in this Cfg class and exposes it as $app->cfg.
+ * - \CitOmni\Kernel\App builds the final merged configuration ("last wins") and
+ *   wraps it in this Cfg class as $app->cfg. The merge order is documented on
+ *   App::buildConfig().
  *
  * Error handling:
- * - \OutOfBoundsException if you access an unknown config key (property or array syntax).
+ * - \OutOfBoundsException on a direct read of an unknown key (property or array syntax).
  * - \LogicException on any write attempt (Cfg is immutable by design).
  * - \UnexpectedValueException if a RAW_ARRAY_SET key is not actually an array.
  *
  * Typical usage:
  *
- *   $baseUrl = $app->cfg->http->base_url ?? null;        // property chaining
- *   $tz      = $app->cfg->locale->timezone ?? 'UTC';     // nested node (Cfg)
- *   $charset = $app->cfg['locale']['charset'] ?? 'UTF-8';// array syntax, same semantics
+ *   // Own cfg (a path the package's Registry ships, or app code reading a key the
+ *   // app defines in its own config files): read directly, without ?? or isset().
+ *   $maxAttempts = (int)$app->cfg->vendor_package->retry->max_attempts;
+ *
+ *   // Cfg owned by someone else, or present in one mode only: ?? with a default.
+ *   $tz      = (string)($app->cfg->locale->timezone ?? 'UTC');
+ *   $charset = (string)($app->cfg['locale']['charset'] ?? 'UTF-8'); // array syntax, same semantics
  *
  *   // still works even if 'mail' was merged in as an empty array:
  *   $mailCfg = $app->cfg->mail->toArray();               // []
@@ -144,54 +152,6 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
  */
 
 	/**
-	 * REPLACED BELOW: OLD ONE HAS BEEN KEPT FOR SAFETY UNTIL NEW ONE HAS BEEN BATTLE-TESTED!
-	 * 
-	 * Magic property accessor for configuration nodes.
-	 *
-	 * Behavior:
-	 * - Fail fast on unknown keys (throws \OutOfBoundsException).
-	 * - If the value is an array and the key is in RAW_ARRAY_SET (e.g., "routes"),
-	 *   return the raw array (never wrapped).
-	 * - If the value is an associative array, lazily wrap it as a Cfg node and memoize
-	 *   the wrapper instance for subsequent accesses.
-	 * - Otherwise, return the value as-is (scalars or numeric lists).
-	 *
-	 * Notes:
-	 * - Memoization ensures hot paths do not re-wrap the same nested associative arrays.
-	 * - Lists (0..n-1) are always returned as plain arrays.
-	 *
-	 * Typical usage:
-	 *   $baseUrl = $cfg->http->base_url ?? null;
-	 *   $routes  = $cfg->routes; // raw array by contract
-	 *
-	 * @param string $key Existing configuration key at this node.
-	 * @return mixed Wrapped Cfg node, raw array, or scalar depending on the stored value.
-	 * @throws \OutOfBoundsException When the key does not exist at this node.
-	 */
-	/* 
-	public function __get(string $key): mixed {
-		if (!\array_key_exists($key, $this->data)) {
-			throw new \OutOfBoundsException("Unknown cfg key: '{$key}'");
-		}
-
-		$val = $this->data[$key];
-
-		// 1) Enforce raw array for specific keys (e.g., routes)
-		if (\is_array($val) && isset(self::RAW_ARRAY_SET[$key])) {
-			return $val;
-		}
-
-		// 2) Wrap associative arrays as Cfg; leave lists as raw arrays
-		if (\is_array($val) && self::isAssoc($val)) {
-			return $this->cache[$key] ??= new self($val);
-		}
-
-		return $val;
-	}
-	*/
-	
-	
-	/**
 	 * Magic property accessor for configuration nodes.
 	 *
 	 * Returns either:
@@ -259,6 +219,8 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	 * Checks whether a configuration key exists.
 	 *
 	 * Uses array_key_exists (not isset) so null values still count as present.
+	 * PHP calls this for every node of an isset() or ?? expression before it reads
+	 * the node, so neither form throws on a missing key.
 	 *
 	 * @param string $key
 	 * @return bool
