@@ -26,7 +26,7 @@ namespace CitOmni\Kernel\Tests\Fixtures;
  * - Dispatch targets name classes that do not exist: the suites read the merged
  *   maps and never dispatch.
  */
-class ProviderFixture {
+final class ProviderFixture {
 
 	/** Provider routes: one exact route and two placeholder routes. */
 	public const array ROUTES_HTTP = [
