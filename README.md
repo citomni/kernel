@@ -88,6 +88,7 @@ Current package structure:
 
 ```text
 citomni/kernel/
+├── .gitattributes
 ├── .gitignore
 ├── composer.json
 ├── CONVENTIONS.md
@@ -95,34 +96,53 @@ citomni/kernel/
 ├── NOTICE
 ├── README.md
 ├── TRADEMARKS.md
+├── install/
+│   ├── manifest.php
+│   └── scaffold/
+│       └── config/
+│           ├── citomni_cfg.dev.php.stub
+│           ├── citomni_cfg.php.stub
+│           ├── citomni_cfg.prod.php.stub
+│           ├── citomni_cfg.stage.php.stub
+│           ├── providers.php.stub
+│           └── services.php.stub
 ├── src/
 │   ├── App.php
 │   ├── Arr.php
 │   ├── Cfg.php
 │   ├── Mode.php
+│   ├── Runtime.php
 │   ├── Command/
-│   │   └── BaseCommand.php
+│   │   ├── ArgvParser.php
+│   │   ├── BaseCommand.php
+│   │   └── HelpFormatter.php
 │   ├── Controller/
 │   │   └── BaseController.php
 │   ├── Operation/
 │   │   └── BaseOperation.php
 │   ├── Repository/
 │   │   └── BaseRepository.php
-│   └── Service/
-│       └── BaseService.php
+│   ├── Service/
+│   │   └── BaseService.php
+│   └── Support/
+│       └── AppInfo.php
 └── tests/
-    ├── run.php
     ├── bootstrap.php
-    ├── Fixtures/
+    ├── run.php
     ├── app-cache/
     │   ├── README.md
     │   └── run.php
     ├── arr/
     │   ├── README.md
     │   └── run.php
-    └── cfg/
-        ├── README.md
-        └── run.php
+    ├── cfg/
+    │   ├── README.md
+    │   └── run.php
+    └── Fixtures/
+        ├── BackedEnumFixture.php
+        ├── PureEnumFixture.php
+        ├── RegistryFixture.php
+        └── TraversableEnumFixture.php
 ```
 
 PSR-4 autoload root:
