@@ -111,8 +111,18 @@ citomni/kernel/
 │   └── Service/
 │       └── BaseService.php
 └── tests/
-    └── Command/
-        └── BaseCommandTest.php
+    ├── run.php
+    ├── bootstrap.php
+    ├── Fixtures/
+    ├── app-cache/
+    │   ├── README.md
+    │   └── run.php
+    ├── arr/
+    │   ├── README.md
+    │   └── run.php
+    └── cfg/
+        ├── README.md
+        └── run.php
 ```
 
 PSR-4 autoload root:
