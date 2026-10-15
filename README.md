@@ -513,6 +513,8 @@ CLI commands are built from:
 3. `config/citomni_cli_commands.php`, if present
 4. `config/citomni_cli_commands.{env}.php`, if present
 
+A source removes an entry of an earlier source by setting it to `null`, like `'notice:schedule' => null` in `config/citomni_cli_commands.prod.php` for a command that a provider registers. The kernel drops `null` entries after the last merge, so a removed entry is missing from `$app->routes` or `$app->commands` and from the cache. A placeholder route under `'regex'` is removed the same way. Only whole entries are removed; a `null` field inside an entry stays as merged.
+
 There are no common dispatch constants. `ROUTES_HTTP` and `COMMANDS_CLI` stay tied to their transport adapters.
 
 ### Services

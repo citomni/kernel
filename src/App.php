@@ -42,6 +42,9 @@ use CitOmni\Kernel\Arr;
  * - Both use the same deterministic "last wins" merge via buildDispatchMap().
  *   Non-array return values from any source fail fast. Empty arrays are skipped
  *   instead of wiping previously merged entries.
+ * - A source removes an entry of an earlier source by setting it to null. Null
+ *   entries are dropped after the last merge, also among the placeholder routes
+ *   under 'regex', so they never reach $this->routes, $this->commands or a cache.
  * - In HTTP mode, $this->commands is []. In CLI mode, $this->routes is [].
  *   This is a semantic separation: each mode carries only its own dispatch
  *   vocabulary. The overhead difference is negligible.
@@ -482,6 +485,8 @@ final class App {
 	 * Notes:
 	 * - Structure returned here MUST be an array shaped exactly as Router expects
 	 *   (e.g. ['/path' => [...], 'regex' => [ ... ] ]).
+	 * - A null entry removes a route: an exact route at the top level, or a
+	 *   placeholder route under 'regex'.
 	 * - Pure read path; no cache writes and no side effects.
 	 *
 	 * @param  string|null  $env  Environment selector or null to use CITOMNI_ENVIRONMENT.
@@ -489,12 +494,20 @@ final class App {
 	 * @throws \RuntimeException  If providers.php is invalid, provider class missing, or a source returns non-array.
 	 */
 	private function buildRoutes(?string $env = null): array {
-		return $this->buildDispatchMap(
+		$routes = $this->buildDispatchMap(
 			\CitOmni\Http\Boot\Registry::ROUTES_HTTP,
 			'ROUTES_HTTP',
 			'citomni_http_routes',
 			$env
 		);
+
+		// Placeholder routes are a map of their own under 'regex' (the Router format
+		// that scanDispatchMapForSlug() also reads), so their null entries go too.
+		if (isset($routes['regex']) && \is_array($routes['regex'])) {
+			$routes['regex'] = self::withoutNullEntries($routes['regex']);
+		}
+
+		return $routes;
 	}
 
 	/**
@@ -539,6 +552,9 @@ final class App {
 	 * Behavior:
 	 * - Fail-fast on non-array returns from provider constants, app base, and env overlay files.
 	 * - If $env is null, the effective environment is taken from CITOMNI_ENVIRONMENT (default "prod").
+	 * - Entries whose merged value is null are dropped, so a source removes an entry
+	 *   of an earlier source by setting it to null. Only whole entries are dropped;
+	 *   a null field inside an entry stays as merged.
 	 *
 	 * @param  array<string, mixed>  $vendorBaseline  Baseline entries from the vendor Registry constant.
 	 * @param  string                $registryConst   Constant name to read from providers (e.g. 'ROUTES_HTTP', 'COMMANDS_CLI').
@@ -605,7 +621,18 @@ final class App {
 			}
 		}
 
-		return $map;
+		// -- 5. Drop removed entries -----------------------------------
+		return self::withoutNullEntries($map);
+	}
+
+	/**
+	 * Drop the entries whose value is null from one level of a dispatch map.
+	 *
+	 * @param  array<string, mixed>  $map  Merged entries of one level.
+	 * @return array<string, mixed>  The same entries in the same order, without the null ones.
+	 */
+	private static function withoutNullEntries(array $map): array {
+		return \array_filter($map, static fn(mixed $entry): bool => $entry !== null);
 	}
 
 
