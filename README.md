@@ -722,7 +722,7 @@ An operation:
 * is instantiated explicitly
 * is SQL-free
 * may coordinate services and repositories
-* returns domain-shaped arrays
+* returns domain-shaped arrays, or void, never or a Generator where BaseOperation allows it
 
 Operations are introduced when orchestration earns its existence, not by default.
 

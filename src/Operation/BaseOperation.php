@@ -29,8 +29,13 @@ use CitOmni\Kernel\App;
  * Rules:
  * - Add no public method other than execute(...) and an optional preflight(...), which takes
  *   the same domain inputs, changes nothing and reports what execute() would do or refuse.
- * - Return documented, domain-shaped arrays, with a status when the outcome can vary.
- * - Never shape transport output or return transport objects, and never execute SQL directly.
+ * - Return a documented, domain-shaped array, with a status when the outcome can vary.
+ *   Return void instead when success has nothing to report and every failure throws, and
+ *   never when execute() cannot return normally.
+ * - Return a Generator only when the caller must consume results one at a time. Each
+ *   yielded value is a documented, domain-shaped array.
+ * - Never build or shape transport output, and never execute SQL directly. A value returned
+ *   by an adapter's callback may pass through, but is never read or changed.
  * - Catch no exceptions in this base; failures bubble to the global error handler.
  */
 abstract class BaseOperation {
