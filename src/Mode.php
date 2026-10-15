@@ -16,9 +16,14 @@ declare(strict_types=1);
 namespace CitOmni\Kernel;
 
 /**
- * Delivery mode for the application.
+ * Mode: Delivery mode for the application.
  */
 enum Mode: string {
+
+	/** The App serves HTTP requests. */
 	case HTTP = 'http';
+
+	/** The App runs console commands. */
 	case CLI  = 'cli';
+
 }

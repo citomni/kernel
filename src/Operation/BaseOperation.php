@@ -20,53 +20,18 @@ use CitOmni\Kernel\App;
 /**
  * BaseOperation: Minimal, transport-agnostic base for Operation classes.
  *
- * Responsibilities:
- * - Expose the application container ($app) for config and services.
- * - Provide a lightweight lifecycle hook via protected init().
- * - Standardize the constructor contract for Operation classes.
+ * An Operation owns transport-agnostic orchestration and state-transition logic for one
+ * concrete domain action. It reaches services and repositories through explicit App access;
+ * SQL belongs to Repositories, and shaping the result for HTTP or CLI belongs to the Controller
+ * or Command that calls it. Operations are created explicitly by their callers and are
+ * intentionally not service-map singletons.
  *
- * Behavior:
- * - Constructor stores $app.
- * - If the child defines init(), it is called automatically (method_exists guard).
- * - No transport concerns live here (no HTTP/CLI shaping, no request/response logic).
- * - No persistence abstraction is introduced here; Operations remain SQL-free by contract.
- *
- * Collaborators:
- * - \CitOmni\Kernel\App (read-only access to services/config via $this->app->id).
- *
- * Architectural role:
- * - Operation owns transport-agnostic orchestration and state-transition logic.
- * - Operation may call services and repositories through explicit App access.
- * - Operation must not shape transport output and must not execute SQL directly.
- *
- * Error handling:
- * - No exceptions are caught; failures bubble to the global error handler.
- *
- * Typical usage:
- *
- *   final class AuthenticateUser extends BaseOperation {
- *       protected function init(): void {
- *           // Keep setup lightweight and deterministic.
- *       }
- *
- *       public function execute(string $email): array {
- *           $this->app->log->write('auth.jsonl', 'authentication', 'Authentication started.');
- *
- *           $repository = new \App\Repository\UserRepository($this->app);
- *           $user = $repository->findByEmail($email);
- *
- *           return [
- *               'ok' => $user !== null,
- *               'user' => $user,
- *           ];
- *       }
- *   }
- *
- * Notes:
- * - Operations are instantiated explicitly by Controllers/Commands via new ...($this->app)
- *   and called through execute(...), optionally preceded by a read-only preflight(...).
- * - Keep init() minimal; it runs eagerly on construction.
- * - Operation is intentionally not a service-map singleton.
+ * Rules:
+ * - Add no public method other than execute(...) and an optional preflight(...), which takes
+ *   the same domain inputs, changes nothing and reports what execute() would do or refuse.
+ * - Return documented, domain-shaped arrays, with a status when the outcome can vary.
+ * - Never shape transport output or return transport objects, and never execute SQL directly.
+ * - Catch no exceptions in this base; failures bubble to the global error handler.
  */
 abstract class BaseOperation {
 
@@ -76,22 +41,19 @@ abstract class BaseOperation {
 	/**
 	 * Inject the application container.
 	 *
-	 * Typical usage:
-	 *   $operation = new AuthenticateUser($app);
+	 * Setup that every instance needs belongs in an optional protected function init(): void,
+	 * not in a constructor of the subclass. Keep init() lightweight and deterministic: No heavy
+	 * I/O, no unnecessary allocations.
 	 *
-	 * @param App $app Application instance (shared container/config).
+	 * Behavior:
+	 * - Calls init() once, after $app is set, when the subclass declares it.
+	 *
+	 * @param  App  $app  Application instance (shared container/config).
 	 */
 	public function __construct(App $app) {
 
 		$this->app = $app;	// Expose services/config with explicit, deterministic wiring.
 
-		/*
-		 * Lifecycle hook (optional).
-		 * Behavior:
-		 * - If the child class defines protected init(): void, call it now.
-		 * Notes:
-		 * - Keep it lightweight (no heavy I/O, no unnecessary allocations).
-		 */
 		if (\method_exists($this, 'init')) {
 			$this->init();
 		}

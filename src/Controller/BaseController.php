@@ -20,58 +20,13 @@ use CitOmni\Kernel\App;
 /**
  * BaseController: Minimal transport adapter base for HTTP controllers.
  *
- * Responsibilities:
- * - Expose the application container ($app) for services and config.
- * - Hold optional per-route configuration ($routeConfig).
- * - Provide a lightweight lifecycle hook via protected init().
+ * Gives every controller the application container, the per-route configuration it was
+ * created with and a lightweight lifecycle hook. Routing, request and response handling and
+ * template rendering belong to the HTTP layer's services; domain decisions belong to
+ * Operations, Policies and Repositories.
  *
- * Behavior:
- * - Constructor stores $app and $routeConfig.
- * - If the child defines init(), it is called automatically (method_exists guard).
- *
- * Collaborators:
- * - \CitOmni\Kernel\App (read-only access to services: $this->app->{serviceId}).
- *
- * Configuration keys:
- * - $routeConfig['template_file']  (string|null) — template path relative to the layer root.
- * - $routeConfig['template_layer'] (string|null) — layer slug (e.g., "app").
- *   The HTTP Router passes exactly these two keys, null when the route does not declare them.
- *
- * Error handling:
- * - No exceptions are caught; failures bubble to the global error handler.
- *
- * Notes:
- * - Rendering goes through the `tplEngine` service provided by citomni/http. Template
- *   references use the explicit "relative/path.html@layer" form; the layer must be a
- *   key in cfg->view->template_layers.
- *
- * Typical usage:
- *
- *   class HomeController extends BaseController {
- *       protected function init(): void {
- *           // lightweight setup only (no heavy I/O)
- *       }
- *       public function index(): void {
- *           $this->app->tplEngine->render(
- *               $this->routeConfig['template_file'] . '@' . $this->routeConfig['template_layer'],
- *               ['title' => 'Home']
- *           );
- *       }
- *   }
- *
- * Examples:
- *   // Render a fixed template reference directly:
- *   $this->app->tplEngine->render('public/index.html@app', ['title' => 'Home']);
- *
- *   // Access deep config (read-only wrapper):
- *   $tz = $this->app->cfg->locale->timezone ?? 'UTC';
- *
- *   // Access route config (raw array):
- *   $tpl = $this->routeConfig['template_file'] ?? null;
- *
- * Failure:
- *   // Calling an action that does not exist should be handled by the router;
- *   // this base does not attempt to catch such errors.
+ * Rules:
+ * - Catch no exceptions in this base; failures bubble to the global error handler.
  */
 abstract class BaseController {
 	
@@ -85,23 +40,19 @@ abstract class BaseController {
 	/**
 	 * Inject the application container and optional per-route config.
 	 *
+	 * Setup and guards that every action needs belong in an optional protected function
+	 * init(): void, not in a constructor of the subclass. Keep init() lightweight: No heavy
+	 * I/O, no heavy allocations.
+	 *
 	 * Behavior:
-	 * - Stores $app and $routeConfig on the instance.
-	 * - Calls the child's protected init(): void afterwards, if defined.
+	 * - Calls init() once, after $app and $routeConfig are set, when the subclass declares it.
 	 *
 	 * Notes:
-	 * - The HTTP Router passes exactly `template_file` and `template_layer` from the
-	 *   matched route (null when not declared); other route keys are not forwarded.
 	 * - Manual instantiation is mainly useful in tests.
-	 *
-	 * Typical usage:
-	 *   $controller = new HomeController($app, [
-	 *       'template_file' => 'public/home.html',
-	 *       'template_layer' => 'app',
-	 *   ]);
 	 *
 	 * @param  App  $app  Application instance (shared container/config).
 	 * @param  array<string,mixed>  $routeConfig  Optional route-specific configuration.
+	 * @see \CitOmni\Http\Service\Router  Which route keys reach $routeConfig.
 	 */
 	public function __construct(App $app, array $routeConfig = []) {
 		
@@ -109,14 +60,6 @@ abstract class BaseController {
 		
 		$this->routeConfig = $routeConfig;	// Templating hints from the route (template_file, template_layer)
 
-
-		/*
-		 * Lifecycle hook (optional).
-		 * Behavior:
-		 * - If the child class defines protected init(): void, call it now.
-		 * Notes:
-		 * - Keep it lightweight (no heavy I/O, no heavy allocations).
-		 */
 		if (\method_exists($this, 'init')) {
 			$this->init();
 		}
@@ -124,9 +67,9 @@ abstract class BaseController {
 
 
 	/**
-	 * Accessor for the route configuration array (read-only contract).
+	 * Return the route configuration this controller was created with.
 	 *
-	 * @return array<string,mixed> Current route configuration.
+	 * @return array<string,mixed>  Current route configuration.
 	 */
 	public function getRouteConfig(): array {
 		return $this->routeConfig;
