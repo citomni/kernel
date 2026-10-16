@@ -149,6 +149,7 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
  *   - Unknown keys => OutOfBoundsException
  *   - RAW_ARRAY_SET => raw arrays (never wrapped)
  *   - Assoc arrays => lazily wrapped Cfg (memoized)
+ *   - Writes and unsets => LogicException
  */
 
 	/**
@@ -227,6 +228,33 @@ final class Cfg implements \ArrayAccess, \IteratorAggregate, \Countable {
 	 */
 	public function __isset(string $key): bool {
 		return \array_key_exists($key, $this->data);
+	}
+
+
+	/**
+	 * Refuse a write with property syntax (read-only by design).
+	 *
+	 * @param  string  $key    Name of the property being written.
+	 * @param  mixed   $value  Value being written; it is never stored.
+	 * @return void
+	 * @throws \LogicException  Always, because Cfg is immutable.
+	 */
+	public function __set(string $key, mixed $value): void {
+		// Without __set(), PHP would create a dynamic property that shadows the stored value for later property reads.
+		throw new \LogicException('Cfg is read-only.');
+	}
+
+
+	/**
+	 * Refuse an unset with property syntax (read-only by design).
+	 *
+	 * @param  string  $key  Name of the property being unset.
+	 * @return void
+	 * @throws \LogicException  Always, because Cfg is immutable.
+	 */
+	public function __unset(string $key): void {
+		// Without __unset(), unset() of a stored key would do nothing and report nothing.
+		throw new \LogicException('Cfg is read-only.');
 	}
 
 
