@@ -110,7 +110,7 @@ final class ArgvParser {
 	 * Parse CLI tokens against a command signature.
 	 *
 	 * @param  array  $tokens     Argv slice after the command name.
-	 * @param  array  $signature  Command signature (see class PHPDoc).
+	 * @param  array{arguments?: array<string,array<string,mixed>>, options?: array<string,array<string,mixed>>}  $signature  Command signature (see class PHPDoc).
 	 * @return array{args: array<string, mixed>, opts: array<string, mixed>, error: ?string}
 	 */
 	public static function parse(array $tokens, array $signature): array {

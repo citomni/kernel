@@ -58,7 +58,7 @@ final class HelpFormatter {
 	 *
 	 * @param  string  $commandName         Command name (e.g. 'import' or 'cache:warm').
 	 * @param  string  $commandDescription  One-line description from the command map.
-	 * @param  array   $signature           Command signature array.
+	 * @param  array{arguments?: array<string,array<string,mixed>>, options?: array<string,array<string,mixed>>}  $signature  Command signature array.
 	 * @return string  Complete help text (no trailing newline - BaseCommand adds PHP_EOL).
 	 */
 	public static function format(string $commandName, string $commandDescription, array $signature): string {
@@ -124,7 +124,7 @@ final class HelpFormatter {
 	 * without needing to run --help separately.
 	 *
 	 * @param  string  $commandName  Command name.
-	 * @param  array   $signature    Command signature array.
+	 * @param  array{arguments?: array<string,array<string,mixed>>, options?: array<string,array<string,mixed>>}  $signature  Command signature array.
 	 * @return string  Usage line (e.g. "Usage: import <file> [--dry-run] [--batch=<int>]").
 	 */
 	public static function usage(string $commandName, array $signature): string {

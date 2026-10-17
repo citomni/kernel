@@ -225,7 +225,7 @@ abstract class BaseCommand {
 	 *       ],
 	 *   ]
 	 *
-	 * @return array<string,array<string,array<string,mixed>>>  Signature array. Empty = no arguments or options.
+	 * @return array{arguments?: array<string,array<string,mixed>>, options?: array<string,array<string,mixed>>}  Empty when the command takes no arguments or options.
 	 * @see \CitOmni\Kernel\Command\ArgvParser::validateSignature()  The rules a signature must meet; checked in dev mode only.
 	 */
 	protected function signature(): array {
