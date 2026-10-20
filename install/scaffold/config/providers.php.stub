@@ -77,6 +77,22 @@ return [
 
 	/*
 	|--------------------------------------------------------------------------
+	| Image Processing
+	|--------------------------------------------------------------------------
+	| Image inspection, transformation, encoding, and derivative generation.
+	*/
+	// \CitOmni\Image\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
+	| File Uploads
+	|--------------------------------------------------------------------------
+	| File validation, storage, upload profiles, and image variants.
+	*/
+	// \CitOmni\Upload\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
 	| Example: Authentication package
 	|--------------------------------------------------------------------------
 	| Login, register, member area, and related auth wiring for apps that use it.
@@ -90,6 +106,14 @@ return [
 	| Admin routes, dashboards, and related backend wiring for apps that use it.
 	*/
 	// \CitOmni\Admin\Boot\Registry::class,
+
+	/*
+	|--------------------------------------------------------------------------
+	| Content Management System
+	|--------------------------------------------------------------------------
+	| CMS pages, content blocks, publishing, and administrative editing.
+	*/
+	// \CitOmni\Cms\Boot\Registry::class,
 
 	/*
 	|--------------------------------------------------------------------------
